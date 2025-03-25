@@ -7,7 +7,11 @@ authors = [
     { name = "Christopher Schölzel", email = "christopher.schoelzel@mailbox.org" }
 ]
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "aiohttp>=3.11.14",
+    "asyncio>=3.4.3",
+    "pydantic>=2.10.6",
+]
 
 [build-system]
 requires = ["hatchling"]
