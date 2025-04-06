@@ -4,15 +4,33 @@ version = "0.1.0"
 description = "Magical tools to interact with APIs from a data scientist's perspective."
 readme = "README.md"
 authors = [
-    { name = "Christopher Schölzel", email = "christopher.schoelzel@mailbox.org" }
+    { name = "Christopher Schölzel", email = "christopher.schoelzel@mailbox.org" },
 ]
 requires-python = ">=3.11"
-dependencies = [
-    "aiohttp>=3.11.14",
-    "asyncio>=3.4.3",
-    "pydantic>=2.10.6",
-]
+dependencies = ["aiohttp>=3.11.14", "asyncio>=3.4.3", "pydantic>=2.10.6"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.ruff]
+
+# Same as Black.
+line-length = 100
+indent-width = 4
+
+# Assume Python 3.11
+target-version = "py311"
+
+# Select all rules by default
+select = ["ALL"]
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+[dependency-groups]
+dev = ["ruff>=0.11.4"]
