@@ -1,28 +1,38 @@
+"""Main module of apicadabri, containing all top-level members."""
+
 import asyncio
-from itertools import repeat
-from typing import Any, Iterable, Literal, TypeVar
+from collections.abc import Iterable
+from itertools import product, repeat
+from typing import Any, Literal, TypeVar
 
 import aiohttp
 from pydantic import BaseModel
 
+# TODO limit max tasks committed to memory
 
-def hello() -> str:
-    return "Hello from apicadabri!"
+# TODO allow different output types: to_jsonl, to_pandas, to_iterable
 
 
 def bulk_get(
-    url: str | None,
-    urls: Iterable[str] | None,
-    params: dict[str, str],
-    param_sets: Iterable[dict[str, str]],
-    json: dict[str, Any],
-    json_sets: Iterable[dict[str, Any]],
-    headers: dict[str, str],
-    header_sets: Iterable[dict[str, str]],
-    **kwargs: Any,
+    url: str | None = None,
+    urls: Iterable[str] | None = None,
+    params: dict[str, str] | None = None,
+    param_sets: Iterable[dict[str, str]] | None = None,
+    json: dict[str, Any] | None = None,
+    json_sets: Iterable[dict[str, Any]] | None = None,
+    headers: dict[str, str] | None = None,
+    header_sets: Iterable[dict[str, str]] | None = None,
+    **kwargs: dict[str, Any],
 ) -> list[str]:
+    if params is None and param_sets is None:
+        params = {}
+    if json is None and json_sets is None:
+        json = {}
+    if headers is None and header_sets is None:
+        headers = {}
     return bulk_call(
-        ApicadabriCallArguments(
+        method="GET",
+        apicadabri_args=ApicadabriCallArguments(
             url=url,
             urls=urls,
             params=params,
@@ -33,17 +43,19 @@ def bulk_get(
             header_sets=header_sets,
             mode="zip",
         ),
-        **kwargs
+        **kwargs,
     )
 
 
 A = TypeVar("A")
+
 
 class ApicadabriCallInstance(BaseModel):
     url: str
     params: dict[str, str]
     json: dict[str, Any]
     headers: dict[str, str]
+
 
 class ApicadabriCallArguments(BaseModel):
     url: str | None
@@ -54,7 +66,7 @@ class ApicadabriCallArguments(BaseModel):
     json_sets: Iterable[dict[str, Any]] | None
     headers: dict[str, str] | None
     header_sets: Iterable[dict[str, str]] | None
-    mode: Literal["zip", "multiply", "pipeline"]
+    mode: Literal["zip", "product", "pipeline"]
 
     # TODO: Validate
     # - At least one not None
@@ -62,24 +74,37 @@ class ApicadabriCallArguments(BaseModel):
     # TODO: Get size if inputs are sized
 
     def __iter__(self):
-        iterables = (self.url_iterable, self.params_iterable, self.json_iterable, self.headers_iterable)
-        if self.method == "zip":
+        iterables = (
+            self.url_iterable,
+            self.params_iterable,
+            self.json_iterable,
+            self.headers_iterable,
+        )
+        if self.mode == "zip":
             combined = zip(*iterables, strict=False)
+        elif self.mode == "product":
+            combined = product(*iterables)
         else:
             raise NotImplementedError(f"Mode {self.mode} not implemented.")
-        return iter(ApicadabriCallInstance(u,p,j,h) for u,p,j,h in combined)
+        return iter(
+            ApicadabriCallInstance(url=u, params=p, json=j, headers=h) for u, p, j, h in combined
+        )
 
-    def any_iterable(self, single_val: A, multi_val: Iterable[A]) -> Iterable[A]:
+    def any_iterable(self, single_val: A | None, multi_val: Iterable[A] | None) -> Iterable[A]:
         if single_val is None:
+            if multi_val is None:
+                msg = "Single and multi val cannot both be null."
+                raise ValueError(msg)
             return multi_val
         if self.mode == "zip":
             return repeat(single_val)
-        elif self.mode == "multiply":
+        if self.mode == "multiply":
             return [single_val]
-        elif self.mode == "pipeline":
-            raise NotImplementedError("Pipeline mode isn't implemented yet.")
-        else:
-            raise ValueError(f"Unrecognized mode {self.mode}")
+        if self.mode == "pipeline":
+            msg = "Pipeline mode isn't implemented yet."
+            raise NotImplementedError(msg)
+        msg = f"Unrecognized mode {self.mode}"
+        raise ValueError(msg)
 
     @property
     def url_iterable(self):
@@ -101,17 +126,32 @@ class ApicadabriCallArguments(BaseModel):
 def bulk_call(
     method: Literal["POST", "GET"],
     apicadabri_args: ApicadabriCallArguments,
-    **kwargs
+    **kwargs,
 ):
-    semaphore = asyncio.Sempaphore(20)
+    semaphore = asyncio.Semaphore(20)
     session = aiohttp
+
     async def call_api(args: ApicadabriCallInstance, session: aiohttp.ClientSession):
         aiohttp_method = session.post if method == "POST" else session.get
         async with semaphore, aiohttp_method(**args.model_dump()) as resp:
             # TODO switch expected type based on header args
             return await resp.json()
 
-    async def bulk_call():
+    async def call_all():
         async with aiohttp.ClientSession() as client:
-            for instance in ApicadabriCallArguments:
-                yield await call_api(instance)
+            # TODO: as_completed only allows generators as input since python 3.12
+            for res in asyncio.as_completed(
+                [call_api(instance, client) for instance in apicadabri_args],
+            ):
+                yield await res
+
+    # TODO: buffer results in ordered data structure to return them in original order
+
+    async def test_print():
+        lst = []
+        async for x in call_all():
+            lst.append(x)
+            print(x)
+        return lst
+
+    return asyncio.run(test_print())
