@@ -5,6 +5,20 @@ Apicadabri is a magical set of tools to interact with APIs from a data scientist
 It focuses on simplicity and speed while being agnostic about what kind of API you're calling.
 If you know how to send a single call to the API you're interested in, you should be good to go to scale up to 100k calls with apicadabri.
 
+## Assumptions
+
+For now, apicadabri assumes that you want to solve a task for which the following holds:
+
+* All inputs fit into memory
+* ~All results fit into memory~ (only if you want a pandas dataframe as output)
+* The number of requests will not overwhelm the asyncio event loop (which is apparently [hard to achieve](https://stackoverflow.com/questions/55761652/what-is-the-overhead-of-an-asyncio-task) anyway unless you have tens or hundreds of millions of calls).
+* You want your results in the same order as the input with no gaps in between.
+
+### Future relaxing of constraints
+
+* For an extreme numbers of calls (>> 10M), add another layer of batching to avoid creating all asyncio tasks at the same time while also avoiding that one slow call in a batch slows down the whole task.
+  * Through the same mechanism, allow loading inputs one batch at a time.
+
 ## Examples
 
 ### Multiple URLs
