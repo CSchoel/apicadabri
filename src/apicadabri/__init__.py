@@ -16,40 +16,6 @@ from pydantic import BaseModel
 # TODO allow different output types: to_jsonl, to_pandas, to_iterable
 
 
-def bulk_get(
-    url: str | None = None,
-    urls: Iterable[str] | None = None,
-    params: dict[str, str] | None = None,
-    param_sets: Iterable[dict[str, str]] | None = None,
-    json: dict[str, Any] | None = None,
-    json_sets: Iterable[dict[str, Any]] | None = None,
-    headers: dict[str, str] | None = None,
-    header_sets: Iterable[dict[str, str]] | None = None,
-    **kwargs: dict[str, Any],
-) -> list[str]:
-    if params is None and param_sets is None:
-        params = {}
-    if json is None and json_sets is None:
-        json = {}
-    if headers is None and header_sets is None:
-        headers = {}
-    return bulk_call(
-        method="GET",
-        apicadabri_args=ApicadabriCallArguments(
-            url=url,
-            urls=urls,
-            params=params,
-            param_sets=param_sets,
-            json=json,
-            json_sets=json_sets,
-            headers=headers,
-            header_sets=header_sets,
-            mode="zip",
-        ),
-        **kwargs,
-    )
-
-
 A = TypeVar("A")
 
 
@@ -171,16 +137,50 @@ class ApicadabriMapResponse(ApicadabriResponse[S], Generic[R, S]):
     async def call_all(self) -> AsyncGenerator[S, None]:
         """Return an iterator that yields the results of the API calls."""
         async for res in self.base.call_all():
-            yield self.func(res)
+            mapped = self.func(res)
+            yield mapped
+
+
+def bulk_get(
+    url: str | None = None,
+    urls: Iterable[str] | None = None,
+    params: dict[str, str] | None = None,
+    param_sets: Iterable[dict[str, str]] | None = None,
+    json: dict[str, Any] | None = None,
+    json_sets: Iterable[dict[str, Any]] | None = None,
+    headers: dict[str, str] | None = None,
+    header_sets: Iterable[dict[str, str]] | None = None,
+    **kwargs: dict[str, Any],
+) -> ApicadabriResponse[dict[str, Any]]:
+    if params is None and param_sets is None:
+        params = {}
+    if json is None and json_sets is None:
+        json = {}
+    if headers is None and header_sets is None:
+        headers = {}
+    return bulk_call(
+        method="GET",
+        apicadabri_args=ApicadabriCallArguments(
+            url=url,
+            urls=urls,
+            params=params,
+            param_sets=param_sets,
+            json=json,
+            json_sets=json_sets,
+            headers=headers,
+            header_sets=header_sets,
+            mode="zip",
+        ),
+        **kwargs,
+    )
 
 
 def bulk_call(
     method: Literal["POST", "GET"],
     apicadabri_args: ApicadabriCallArguments,
     **kwargs,
-):
+) -> ApicadabriResponse[dict[str, Any]]:
     semaphore = asyncio.Semaphore(20)
-    session = aiohttp
 
     async def call_api(
         args: ApicadabriCallInstance, session: aiohttp.ClientSession
@@ -190,21 +190,17 @@ def bulk_call(
             # TODO switch expected type based on header args
             return await resp.json()
 
-    async def call_all():
-        async with aiohttp.ClientSession() as client:
-            # TODO: as_completed only allows generators as input since python 3.12
-            for res in asyncio.as_completed(
-                [call_api(instance, client) for instance in apicadabri_args],
-            ):
-                yield await res
+    class ApicadabriBulkCallResponse(ApicadabriResponse[dict[str, Any]]):
+        async def call_all():
+            async with aiohttp.ClientSession() as client:
+                # TODO: as_completed only allows generators as input since python 3.12
+                for res in asyncio.as_completed(
+                    [call_api(instance, client) for instance in apicadabri_args],
+                ):
+                    yield await res
+
+    response = ApicadabriBulkCallResponse()
 
     # TODO: buffer results in ordered data structure to return them in original order
 
-    async def test_print():
-        lst = []
-        async for x in call_all():
-            lst.append(x)
-            print(x)
-        return lst
-
-    return asyncio.run(test_print())
+    return response
