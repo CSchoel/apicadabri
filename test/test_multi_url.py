@@ -2,7 +2,7 @@ import asyncio
 import json
 import random
 import time
-from typing import Callable
+from collections.abc import Callable
 
 import apicadabri
 
@@ -38,18 +38,26 @@ class MockResponse:
 def test_multi_url():
     pokemon = ["bulbasaur", "squirtle", "charmander"]
     data = apicadabri.bulk_get(
-        urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon)
+        urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
     ).to_list()
     assert len(data) == len(pokemon)
     assert all(d["name"] in pokemon for d in data)
     assert [d["name"] for d in data] == pokemon
 
+
 def test_multi_url_mocked(mocker):
     pokemon = ["bulbasaur", "squirtle", "charmander"]
+
+    mocker.patch(
+        "aiohttp.ClientSession.get",
+        side_effect=lambda *args, **kwargs: MockResponse(
+            json.dumps({"name": kwargs["url"].split("/")[-1]}),
+            200,
+        ),
+    )
     data = apicadabri.bulk_get(
-        urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon)
+        urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
     ).to_list()
-    mocker.patch("aiohttp.ClientSession.get", return_value=resp)
     assert len(data) == len(pokemon)
     assert all(d["name"] in pokemon for d in data)
     assert [d["name"] for d in data] == pokemon
@@ -66,7 +74,10 @@ def test_multi_url_speed(mocker):
 
     mocker.patch("aiohttp.ClientSession.get", return_value=resp)
     tstamp = time.time()
-    lst = apicadabri.bulk_get(urls=(str(x) for x in range(1000)), max_active_calls=100).to_list()
+    lst = apicadabri.bulk_get(
+        urls=(str(x) for x in range(1000)),
+        max_active_calls=100,
+    ).to_list()
     elapsed = time.time() - tstamp
     # total time = 990 * 0.01 + 10 * 0.1 = 10.9
     # speedup without overhead: 100x (with 100 parallel slots for tasks)
