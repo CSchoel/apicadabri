@@ -3,6 +3,7 @@
 import asyncio
 import json
 from abc import abstractmethod
+from bisect import insort_right
 from collections.abc import Iterable
 from itertools import product, repeat
 from pathlib import Path
@@ -186,21 +187,29 @@ def bulk_call(
     semaphore = asyncio.Semaphore(max_active_calls)
 
     async def call_api(
-        args: ApicadabriCallInstance, session: aiohttp.ClientSession
-    ) -> dict[str, Any]:
+        args: ApicadabriCallInstance, session: aiohttp.ClientSession, index: int
+    ) -> tuple[int, dict[str, Any]]:
         aiohttp_method = session.post if method == "POST" else session.get
         async with semaphore, aiohttp_method(**args.model_dump()) as resp:
             # TODO switch expected type based on header args
-            return await resp.json()
+            return (index, await resp.json())
 
     class ApicadabriBulkCallResponse(ApicadabriResponse[dict[str, Any]]):
         async def call_all(self):
+            next_index = 0
+            # TODO: use some tree-based data structure (BST?) if buffer performance becomes an issue
+            buffer = []
             async with aiohttp.ClientSession() as client:
                 # TODO: as_completed only allows generators as input since python 3.12
                 for res in asyncio.as_completed(
-                    [call_api(instance, client) for instance in apicadabri_args],
+                    [call_api(instance, client, i) for i, instance in enumerate(apicadabri_args)],
                 ):
-                    yield await res
+                    current_index, current_res = await res
+                    insort_right(buffer, (current_index, current_res))
+                    while current_index == next_index:
+                        yield buffer.pop(0)[1]
+                        current_index = buffer[0][0] if len(buffer) > 0 else -1
+                        next_index += 1
 
     response = ApicadabriBulkCallResponse()
 
