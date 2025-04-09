@@ -4,18 +4,20 @@ import random
 import time
 from collections.abc import Callable
 
+import pytest
+
 import apicadabri
 
 
 # Source: https://stackoverflow.com/a/59351425
 class MockResponse:
-    def __init__(self, text, status, latency: int | Callable[[], float] = 0):
+    def __init__(self, text, status, latency: float | Callable[[], float] = 0.0):
         self._text = text
         self.status = status
         self.latency = latency
 
     async def maybe_sleep(self):
-        if not isinstance(self.latency, int):
+        if not isinstance(self.latency, (float, int)):
             await asyncio.sleep(self.latency())
         elif self.latency > 0:
             await asyncio.sleep(self.latency)
@@ -84,4 +86,33 @@ def test_multi_url_speed(mocker):
     # => theoretic time = 10.9 / 100 = 0.109
     assert elapsed < 0.3
     assert len(lst) == 1000
+    assert lst[0] == {"answer": 42}
+
+
+@pytest.mark.parametrize(
+    ("n", "max_active_calls", "expected_time_s"),
+    [
+        (10_000, 1000, 0.3),
+        (100_000, 1000, 6),
+        pytest.param(
+            1_000_000,
+            1000,
+            300,
+            marks=pytest.mark.skip(reason="This test takes 300s to run, so we skip it by default."),
+        ),
+    ],
+)
+def test_task_limit(mocker, n, max_active_calls, expected_time_s):
+    data = {"answer": 42}
+    resp = MockResponse(json.dumps(data), 200, latency=0)
+
+    mocker.patch("aiohttp.ClientSession.get", return_value=resp)
+    tstamp = time.time()
+    lst = apicadabri.bulk_get(
+        urls=(str(x) for x in range(n)),
+        max_active_calls=max_active_calls,
+    ).to_list()
+    elapsed = time.time() - tstamp
+    assert elapsed < expected_time_s
+    assert len(lst) == n
     assert lst[0] == {"answer": 42}
