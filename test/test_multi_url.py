@@ -44,6 +44,16 @@ def test_multi_url():
     assert all(d["name"] in pokemon for d in data)
     assert [d["name"] for d in data] == pokemon
 
+def test_multi_url_mocked(mocker):
+    pokemon = ["bulbasaur", "squirtle", "charmander"]
+    data = apicadabri.bulk_get(
+        urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon)
+    ).to_list()
+    mocker.patch("aiohttp.ClientSession.get", return_value=resp)
+    assert len(data) == len(pokemon)
+    assert all(d["name"] in pokemon for d in data)
+    assert [d["name"] for d in data] == pokemon
+
 
 def test_multi_url_speed(mocker):
     random.seed(2456567663)
