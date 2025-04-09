@@ -26,8 +26,9 @@ For now, apicadabri assumes that you want to solve a task for which the followin
 ```python
 import apicadabri
 pokemon = ["bulbasaur", "squirtle", "charmander"]
-response = apicadabri.bulk_get(urls=f"https://pokeapi.co/api/v2/{p}" for p in pokemon)
-print()
+data = apicadabri.bulk_get(
+    urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
+).to_list()
 ```
 
 ### Multiple payloads
