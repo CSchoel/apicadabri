@@ -5,6 +5,10 @@ Apicadabri is a magical set of tools to interact with APIs from a data scientist
 It focuses on simplicity and speed while being agnostic about what kind of API you're calling.
 If you know how to send a single call to the API you're interested in, you should be good to go to scale up to 100k calls with apicadabri.
 
+## Current status
+
+This is still an early alpha. Some basic examples already work, though (see below).
+
 ## Assumptions
 
 For now, apicadabri assumes that you want to solve a task for which the following holds:
