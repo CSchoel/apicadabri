@@ -1,9 +1,12 @@
 """Main module of apicadabri, containing all top-level members."""
 
 import asyncio
+import json
+from abc import abstractmethod
 from collections.abc import Iterable
 from itertools import product, repeat
-from typing import Any, Literal, TypeVar
+from pathlib import Path
+from typing import Any, AsyncGenerator, Callable, Generator, Generic, Literal, Self, TypeVar
 
 import aiohttp
 from pydantic import BaseModel
@@ -122,6 +125,54 @@ class ApicadabriCallArguments(BaseModel):
     def headers_iterable(self):
         return self.any_iterable(self.headers, self.header_sets)
 
+R = TypeVar("R")
+S = TypeVar("S")
+
+
+class ApicadabriResponse(Generic[R]):
+    def __init__(self):
+        pass
+
+    def map(self, func: Callable[[R], S]) -> "ApicadabriResponse[S]":
+        """Apply a function to the response."""
+        return ApicadabriMapResponse(self, func)
+
+    @abstractmethod
+    def call_all(self) -> AsyncGenerator[R, None]:
+        """Return an iterator that yields the results of the API calls."""
+        ...
+
+    def to_jsonl(self, filename: Path | str) -> None:
+        filename_path = Path(filename)
+        with filename_path.open("w", encoding="utf-8") as f:
+            asyncio.run(self.reduce(lambda _, r: f.write(json.dumps(r) + "\n"), start=0))
+
+    def to_list(self) -> list[R]:
+        start: list[R] = []
+
+        def appender(lst: list[R], element: R):
+            lst.append(element)
+            return lst
+
+        return asyncio.run(self.reduce(appender, start=start))
+
+    async def reduce(self, accumulator: Callable[[A, R], A], start: A) -> A:
+        accumulated = start
+        async for res in self.call_all():
+            accumulated = accumulator(accumulated, res)
+        return accumulated
+
+
+class ApicadabriMapResponse(ApicadabriResponse[S], Generic[R, S]):
+    def __init__(self, base: ApicadabriResponse[R], func: Callable[[R], S]):
+        self.func = func
+        self.base = base
+
+    async def call_all(self) -> AsyncGenerator[S, None]:
+        """Return an iterator that yields the results of the API calls."""
+        async for res in self.base.call_all():
+            yield self.func(res)
+
 
 def bulk_call(
     method: Literal["POST", "GET"],
@@ -131,7 +182,9 @@ def bulk_call(
     semaphore = asyncio.Semaphore(20)
     session = aiohttp
 
-    async def call_api(args: ApicadabriCallInstance, session: aiohttp.ClientSession):
+    async def call_api(
+        args: ApicadabriCallInstance, session: aiohttp.ClientSession
+    ) -> dict[str, Any]:
         aiohttp_method = session.post if method == "POST" else session.get
         async with semaphore, aiohttp_method(**args.model_dump()) as resp:
             # TODO switch expected type based on header args
