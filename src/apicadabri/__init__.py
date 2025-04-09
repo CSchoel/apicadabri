@@ -150,6 +150,7 @@ def bulk_get(
     json_sets: Iterable[dict[str, Any]] | None = None,
     headers: dict[str, str] | None = None,
     header_sets: Iterable[dict[str, str]] | None = None,
+    max_active_calls: int = 20,
     **kwargs: dict[str, Any],
 ) -> ApicadabriResponse[dict[str, Any]]:
     if params is None and param_sets is None:
@@ -171,6 +172,7 @@ def bulk_get(
             header_sets=header_sets,
             mode="zip",
         ),
+        max_active_calls=max_active_calls,
         **kwargs,
     )
 
@@ -178,9 +180,10 @@ def bulk_get(
 def bulk_call(
     method: Literal["POST", "GET"],
     apicadabri_args: ApicadabriCallArguments,
+    max_active_calls: int = 20,
     **kwargs,
 ) -> ApicadabriResponse[dict[str, Any]]:
-    semaphore = asyncio.Semaphore(20)
+    semaphore = asyncio.Semaphore(max_active_calls)
 
     async def call_api(
         args: ApicadabriCallInstance, session: aiohttp.ClientSession
@@ -191,7 +194,7 @@ def bulk_call(
             return await resp.json()
 
     class ApicadabriBulkCallResponse(ApicadabriResponse[dict[str, Any]]):
-        async def call_all():
+        async def call_all(self):
             async with aiohttp.ClientSession() as client:
                 # TODO: as_completed only allows generators as input since python 3.12
                 for res in asyncio.as_completed(
