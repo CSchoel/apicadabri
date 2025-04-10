@@ -4,10 +4,10 @@ import asyncio
 import json
 from abc import abstractmethod
 from bisect import insort_right
-from collections.abc import Iterable
+from collections.abc import AsyncGenerator, Callable, Generator, Iterable
 from itertools import product, repeat
 from pathlib import Path
-from typing import Any, AsyncGenerator, Callable, Generator, Generic, Literal, Self, TypeVar
+from typing import Any, Generic, Literal, Self, TypeVar
 
 import aiohttp
 from pydantic import BaseModel
@@ -92,6 +92,7 @@ class ApicadabriCallArguments(BaseModel):
     def headers_iterable(self):
         return self.any_iterable(self.headers, self.header_sets)
 
+
 R = TypeVar("R")
 S = TypeVar("S")
 
@@ -142,6 +143,31 @@ class ApicadabriMapResponse(ApicadabriResponse[S], Generic[R, S]):
             yield mapped
 
 
+class SyncedClientResponse:
+    def __init__(self, base: aiohttp.ClientResponse, body: bytes):
+        self.base = base
+        self.body = body
+
+    @property
+    def version(self) -> aiohttp.HttpVersion | None:
+        return self.base.version
+
+    @property
+    def status(self) -> int:
+        return self.base.status
+
+    # TODO add more properties
+
+    def text(self, encoding="utf-8") -> str:
+        return self.body.decode(encoding)
+
+    def json(self) -> Any:
+        return json.loads(self.text())
+
+    def read(self) -> bytes:
+        return self.body
+
+
 def bulk_get(
     url: str | None = None,
     urls: Iterable[str] | None = None,
@@ -153,7 +179,7 @@ def bulk_get(
     header_sets: Iterable[dict[str, str]] | None = None,
     max_active_calls: int = 20,
     **kwargs: dict[str, Any],
-) -> ApicadabriResponse[dict[str, Any]]:
+) -> ApicadabriResponse[SyncedClientResponse]:
     if params is None and param_sets is None:
         params = {}
     if json is None and json_sets is None:
@@ -182,19 +208,23 @@ def bulk_call(
     method: Literal["POST", "GET"],
     apicadabri_args: ApicadabriCallArguments,
     max_active_calls: int = 20,
+    # response_type: Literal["bytes", "str", "json", "raw"] = "json",
     **kwargs,
-) -> ApicadabriResponse[dict[str, Any]]:
+) -> ApicadabriResponse[SyncedClientResponse]:
     semaphore = asyncio.Semaphore(max_active_calls)
 
     async def call_api(
-        args: ApicadabriCallInstance, session: aiohttp.ClientSession, index: int
-    ) -> tuple[int, dict[str, Any]]:
+        args: ApicadabriCallInstance,
+        session: aiohttp.ClientSession,
+        index: int,
+    ) -> tuple[int, SyncedClientResponse]:
         aiohttp_method = session.post if method == "POST" else session.get
         async with semaphore, aiohttp_method(**args.model_dump()) as resp:
             # TODO switch expected type based on header args
-            return (index, await resp.json())
+            async with resp:
+                return (index, SyncedClientResponse(resp, await resp.read()))
 
-    class ApicadabriBulkCallResponse(ApicadabriResponse[dict[str, Any]]):
+    class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
         async def call_all(self):
             next_index = 0
             # TODO: use some tree-based data structure (BST?) if buffer performance becomes an issue
@@ -210,6 +240,15 @@ def bulk_call(
                         yield buffer.pop(0)[1]
                         current_index = buffer[0][0] if len(buffer) > 0 else -1
                         next_index += 1
+
+        def json(self) -> ApicadabriResponse[Any]:
+            return self.map(SyncedClientResponse.json)
+
+        def text(self) -> ApicadabriResponse[str]:
+            return self.map(SyncedClientResponse.text)
+
+        def read(self) -> ApicadabriResponse[bytes]:
+            return self.map(SyncedClientResponse.read)
 
     response = ApicadabriBulkCallResponse()
 

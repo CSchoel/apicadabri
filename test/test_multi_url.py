@@ -3,6 +3,7 @@ import json
 import random
 import time
 from collections.abc import Callable
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -15,6 +16,10 @@ class MockResponse:
         self._text = text
         self.status = status
         self.latency = latency
+        self.content = MagicMock()
+
+    async def read(self):
+        return self._text.encode("utf-8")
 
     async def maybe_sleep(self):
         if not isinstance(self.latency, (float, int)):
@@ -39,9 +44,13 @@ class MockResponse:
 
 def test_multi_url():
     pokemon = ["bulbasaur", "squirtle", "charmander"]
-    data = apicadabri.bulk_get(
-        urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
-    ).to_list()
+    data = (
+        apicadabri.bulk_get(
+            urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
+        )
+        .map(lambda x: x.json())  # TODO: use .json() instead and advertise its existance
+        .to_list()
+    )
     assert len(data) == len(pokemon)
     assert all(d["name"] in pokemon for d in data)
     assert [d["name"] for d in data] == pokemon
@@ -57,9 +66,13 @@ def test_multi_url_mocked(mocker):
             200,
         ),
     )
-    data = apicadabri.bulk_get(
-        urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
-    ).to_list()
+    data = (
+        apicadabri.bulk_get(
+            urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
+        )
+        .map(lambda x: x.json())
+        .to_list()
+    )
     assert len(data) == len(pokemon)
     assert all(d["name"] in pokemon for d in data)
     assert [d["name"] for d in data] == pokemon
@@ -76,10 +89,14 @@ def test_multi_url_speed(mocker):
 
     mocker.patch("aiohttp.ClientSession.get", return_value=resp)
     tstamp = time.time()
-    lst = apicadabri.bulk_get(
-        urls=(str(x) for x in range(1000)),
-        max_active_calls=100,
-    ).to_list()
+    lst = (
+        apicadabri.bulk_get(
+            urls=(str(x) for x in range(1000)),
+            max_active_calls=100,
+        )
+        .map(lambda x: x.json())
+        .to_list()
+    )
     elapsed = time.time() - tstamp
     # total time = 990 * 0.01 + 10 * 0.1 = 10.9
     # speedup without overhead: 100x (with 100 parallel slots for tasks)
@@ -108,10 +125,14 @@ def test_task_limit(mocker, n, max_active_calls, expected_time_s):
 
     mocker.patch("aiohttp.ClientSession.get", return_value=resp)
     tstamp = time.time()
-    lst = apicadabri.bulk_get(
-        urls=(str(x) for x in range(n)),
-        max_active_calls=max_active_calls,
-    ).to_list()
+    lst = (
+        apicadabri.bulk_get(
+            urls=(str(x) for x in range(n)),
+            max_active_calls=max_active_calls,
+        )
+        .map(lambda x: x.json())
+        .to_list()
+    )
     elapsed = time.time() - tstamp
     assert elapsed < expected_time_s
     assert len(lst) == n
