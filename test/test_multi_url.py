@@ -48,7 +48,7 @@ def test_multi_url():
         apicadabri.bulk_get(
             urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
         )
-        .map(lambda x: x.json())  # TODO: use .json() instead and advertise its existance
+        .json()
         .to_list()
     )
     assert len(data) == len(pokemon)
@@ -70,7 +70,7 @@ def test_multi_url_mocked(mocker):
         apicadabri.bulk_get(
             urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
         )
-        .map(lambda x: x.json())
+        .json()
         .to_list()
     )
     assert len(data) == len(pokemon)
@@ -94,7 +94,7 @@ def test_multi_url_speed(mocker):
             urls=(str(x) for x in range(1000)),
             max_active_calls=100,
         )
-        .map(lambda x: x.json())
+        .json()
         .to_list()
     )
     elapsed = time.time() - tstamp
@@ -130,7 +130,7 @@ def test_task_limit(mocker, n, max_active_calls, expected_time_s):
             urls=(str(x) for x in range(n)),
             max_active_calls=max_active_calls,
         )
-        .map(lambda x: x.json())
+        .json()
         .to_list()
     )
     elapsed = time.time() - tstamp

@@ -33,7 +33,7 @@ import apicadabri
 pokemon = ["bulbasaur", "squirtle", "charmander"]
 data = apicadabri.bulk_get(
     urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
-).to_list()
+).json().to_list()
 ```
 
 ### Multiple payloads

@@ -168,6 +168,57 @@ class SyncedClientResponse:
         return self.body
 
 
+class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
+    def __init__(
+        self,
+        apicadabri_args: ApicadabriCallArguments,
+        method: Literal["POST", "GET"],
+        semaphore: asyncio.Semaphore,
+    ):
+        self.apicadabri_args = apicadabri_args
+        self.method = method
+        self.semaphore = semaphore
+
+    async def call_api(
+        self,
+        args: ApicadabriCallInstance,
+        session: aiohttp.ClientSession,
+        index: int,
+    ) -> tuple[int, SyncedClientResponse]:
+        aiohttp_method = session.post if self.method == "POST" else session.get
+        async with self.semaphore, aiohttp_method(**args.model_dump()) as resp, resp:
+            # TODO switch expected type based on header args
+            return (index, SyncedClientResponse(resp, await resp.read()))
+
+    async def call_all(self):
+        next_index = 0
+        # TODO: use some tree-based data structure (BST?) if buffer performance becomes an issue
+        buffer = []
+        async with aiohttp.ClientSession() as client:
+            # TODO: as_completed only allows generators as input since python 3.12
+            for res in asyncio.as_completed(
+                [
+                    self.call_api(instance, client, i)
+                    for i, instance in enumerate(self.apicadabri_args)
+                ],
+            ):
+                current_index, current_res = await res
+                insort_right(buffer, (current_index, current_res))
+                while current_index == next_index:
+                    yield buffer.pop(0)[1]
+                    current_index = buffer[0][0] if len(buffer) > 0 else -1
+                    next_index += 1
+
+    def json(self) -> ApicadabriResponse[Any]:
+        return self.map(SyncedClientResponse.json)
+
+    def text(self) -> ApicadabriResponse[str]:
+        return self.map(SyncedClientResponse.text)
+
+    def read(self) -> ApicadabriResponse[bytes]:
+        return self.map(SyncedClientResponse.read)
+
+
 def bulk_get(
     url: str | None = None,
     urls: Iterable[str] | None = None,
@@ -179,7 +230,7 @@ def bulk_get(
     header_sets: Iterable[dict[str, str]] | None = None,
     max_active_calls: int = 20,
     **kwargs: dict[str, Any],
-) -> ApicadabriResponse[SyncedClientResponse]:
+) -> ApicadabriBulkCallResponse:
     if params is None and param_sets is None:
         params = {}
     if json is None and json_sets is None:
@@ -210,47 +261,14 @@ def bulk_call(
     max_active_calls: int = 20,
     # response_type: Literal["bytes", "str", "json", "raw"] = "json",
     **kwargs,
-) -> ApicadabriResponse[SyncedClientResponse]:
+) -> ApicadabriBulkCallResponse:
     semaphore = asyncio.Semaphore(max_active_calls)
 
-    async def call_api(
-        args: ApicadabriCallInstance,
-        session: aiohttp.ClientSession,
-        index: int,
-    ) -> tuple[int, SyncedClientResponse]:
-        aiohttp_method = session.post if method == "POST" else session.get
-        async with semaphore, aiohttp_method(**args.model_dump()) as resp:
-            # TODO switch expected type based on header args
-            async with resp:
-                return (index, SyncedClientResponse(resp, await resp.read()))
-
-    class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
-        async def call_all(self):
-            next_index = 0
-            # TODO: use some tree-based data structure (BST?) if buffer performance becomes an issue
-            buffer = []
-            async with aiohttp.ClientSession() as client:
-                # TODO: as_completed only allows generators as input since python 3.12
-                for res in asyncio.as_completed(
-                    [call_api(instance, client, i) for i, instance in enumerate(apicadabri_args)],
-                ):
-                    current_index, current_res = await res
-                    insort_right(buffer, (current_index, current_res))
-                    while current_index == next_index:
-                        yield buffer.pop(0)[1]
-                        current_index = buffer[0][0] if len(buffer) > 0 else -1
-                        next_index += 1
-
-        def json(self) -> ApicadabriResponse[Any]:
-            return self.map(SyncedClientResponse.json)
-
-        def text(self) -> ApicadabriResponse[str]:
-            return self.map(SyncedClientResponse.text)
-
-        def read(self) -> ApicadabriResponse[bytes]:
-            return self.map(SyncedClientResponse.read)
-
-    response = ApicadabriBulkCallResponse()
+    response = ApicadabriBulkCallResponse(
+        apicadabri_args=apicadabri_args,
+        method=method,
+        semaphore=semaphore,
+    )
 
     # TODO: buffer results in ordered data structure to return them in original order
 
