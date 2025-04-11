@@ -5,9 +5,16 @@ import json
 from abc import abstractmethod
 from bisect import insort_right
 from collections.abc import AsyncGenerator, Callable, Generator, Iterable
+from http.cookies import SimpleCookie
 from itertools import product, repeat
 from pathlib import Path
 from typing import Any, Generic, Literal, Self, TypeAlias, TypeVar
+
+import yarl
+from aiohttp.client_reqrep import ContentDisposition
+from aiohttp.connector import Connection
+from aiohttp.typedefs import RawHeaders
+from multidict import CIMultiDictProxy, MultiDictProxy
 
 # source: https://stackoverflow.com/a/76646986
 # NOTE: we could use "JSON" instead of Any here to define a recursive type
@@ -163,10 +170,76 @@ class SyncedClientResponse:
     def status(self) -> int:
         return self.base.status
 
+    @property
+    def reason(self) -> str | None:
+        return self.base.reason
+
+    @property
+    def ok(self) -> bool:
+        return self.base.ok
+
+    @property
+    def method(self) -> str:
+        return self.base.method
+
+    @property
+    def url(self) -> yarl.URL:
+        return self.base.url
+
+    @property
+    def real_url(self) -> yarl.URL:
+        return self.base.real_url
+
+    @property
+    def connection(self) -> Connection | None:
+        return self.base.connection
+
+    @property
+    def cookies(self) -> SimpleCookie:
+        return self.base.cookies
+
+    @property
+    def headers(self) -> CIMultiDictProxy[str]:
+        return self.base.headers
+
+    @property
+    def raw_headers(self) -> RawHeaders:
+        return self.base.raw_headers
+
+    @property
+    def links(self) -> MultiDictProxy[MultiDictProxy[str | yarl.URL]]:
+        return self.base.links
+
+    @property
+    def content_type(self) -> str:
+        return self.base.content_type
+
+    @property
+    def charset(self) -> str | None:
+        return self.base.charset
+
+    @property
+    def content_disposition(self) -> ContentDisposition | None:
+        return self.base.content_disposition
+
+    @property
+    def history(self) -> tuple[aiohttp.ClientResponse, ...]:
+        return self.base.history
+
+    def raise_for_status(self) -> None:
+        self.base.raise_for_status()
+
+    @property
+    def request_info(self) -> aiohttp.RequestInfo:
+        return self.base.request_info
+
+    def get_encoding(self) -> str:
+        return self.base.get_encoding()
+
     # TODO add more properties
 
-    def text(self, encoding="utf-8") -> str:
-        return self.body.decode(encoding)
+    def text(self, encoding=None) -> str:
+        return self.body.decode(encoding or self.get_encoding())
 
     def json(self) -> Any:
         return json.loads(self.text())
