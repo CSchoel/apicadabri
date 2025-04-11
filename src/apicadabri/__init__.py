@@ -236,8 +236,6 @@ class SyncedClientResponse:
     def get_encoding(self) -> str:
         return self.base.get_encoding()
 
-    # TODO add more properties
-
     def text(self, encoding=None) -> str:
         return self.body.decode(encoding or self.get_encoding())
 
