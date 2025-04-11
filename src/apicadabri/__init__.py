@@ -7,10 +7,15 @@ from bisect import insort_right
 from collections.abc import AsyncGenerator, Callable, Generator, Iterable
 from itertools import product, repeat
 from pathlib import Path
-from typing import Any, Generic, Literal, Self, TypeVar
+from typing import Any, Generic, Literal, Self, TypeAlias, TypeVar
+
+# source: https://stackoverflow.com/a/76646986
+# NOTE: we could use "JSON" instead of Any here to define a recursive type
+# however, this won't work with pydantic, so we settle for a shallow representation here
+JSON: TypeAlias = dict[str, Any] | list[Any] | str | int | float | bool | None
 
 import aiohttp
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # TODO limit max tasks committed to memory
 
@@ -23,7 +28,8 @@ A = TypeVar("A")
 class ApicadabriCallInstance(BaseModel):
     url: str
     params: dict[str, str]
-    json: dict[str, Any]
+    # NOTE we need to use an alias to avoid shadowing the BaseModel field
+    json_data: JSON = Field(alias="json")
     headers: dict[str, str]
 
 
@@ -32,8 +38,9 @@ class ApicadabriCallArguments(BaseModel):
     urls: Iterable[str] | None
     params: dict[str, str] | None
     param_sets: Iterable[dict[str, str]] | None
-    json: dict[str, Any] | None
-    json_sets: Iterable[dict[str, Any]] | None
+    # NOTE we need to use an alias to avoid shadowing the BaseModel field
+    json_data: JSON | None = Field(alias="json")
+    json_sets: Iterable[JSON] | None
     headers: dict[str, str] | None
     header_sets: Iterable[dict[str, str]] | None
     mode: Literal["zip", "product", "pipeline"]
@@ -86,7 +93,7 @@ class ApicadabriCallArguments(BaseModel):
 
     @property
     def json_iterable(self):
-        return self.any_iterable(self.json, self.json_sets)
+        return self.any_iterable(self.json_data, self.json_sets)
 
     @property
     def headers_iterable(self):
@@ -186,8 +193,7 @@ class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
         index: int,
     ) -> tuple[int, SyncedClientResponse]:
         aiohttp_method = session.post if self.method == "POST" else session.get
-        async with self.semaphore, aiohttp_method(**args.model_dump()) as resp, resp:
-            # TODO switch expected type based on header args
+        async with self.semaphore, aiohttp_method(**args.model_dump(by_alias=True)) as resp, resp:
             return (index, SyncedClientResponse(resp, await resp.read()))
 
     async def call_all(self):
@@ -224,8 +230,8 @@ def bulk_get(
     urls: Iterable[str] | None = None,
     params: dict[str, str] | None = None,
     param_sets: Iterable[dict[str, str]] | None = None,
-    json: dict[str, Any] | None = None,
-    json_sets: Iterable[dict[str, Any]] | None = None,
+    json: JSON | None = None,
+    json_sets: Iterable[JSON] | None = None,
     headers: dict[str, str] | None = None,
     header_sets: Iterable[dict[str, str]] | None = None,
     max_active_calls: int = 20,
@@ -264,12 +270,8 @@ def bulk_call(
 ) -> ApicadabriBulkCallResponse:
     semaphore = asyncio.Semaphore(max_active_calls)
 
-    response = ApicadabriBulkCallResponse(
+    return ApicadabriBulkCallResponse(
         apicadabri_args=apicadabri_args,
         method=method,
         semaphore=semaphore,
     )
-
-    # TODO: buffer results in ordered data structure to return them in original order
-
-    return response
