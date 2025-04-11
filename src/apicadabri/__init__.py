@@ -10,23 +10,37 @@ from itertools import product, repeat
 from pathlib import Path
 from typing import Any, Generic, Literal, Self, TypeAlias, TypeVar
 
+import aiohttp
 import yarl
 from aiohttp.client_reqrep import ContentDisposition
 from aiohttp.connector import Connection
 from aiohttp.typedefs import RawHeaders
 from multidict import CIMultiDictProxy, MultiDictProxy
+from pydantic import BaseModel, Field
 
 # source: https://stackoverflow.com/a/76646986
 # NOTE: we could use "JSON" instead of Any here to define a recursive type
 # however, this won't work with pydantic, so we settle for a shallow representation here
 JSON: TypeAlias = dict[str, Any] | list[Any] | str | int | float | bool | None
 
-import aiohttp
-from pydantic import BaseModel, Field
 
 # TODO limit max tasks committed to memory
+# idea:
+# - use batches of 10k or 100k tasks
+# - start new batch when all of the following apply
+#   - all batches before the last one have been completed
+#   - the last batch has less than max_active_calls items left
+# - share the semaphore between batches
+# This requires the following changes:
+# - track completion percentage of batches
+# - use Runner to issue multiple bulk_call instances as batches
+# - add runner and semaphore as optional args to bulk_call
 
-# TODO allow different output types: to_jsonl, to_pandas, to_iterable
+# TODO allow direct output to pandas or polars? (maybe as extras?)
+
+# TODO add tqdm
+
+# TODO turn TODOs into issues
 
 
 A = TypeVar("A")
@@ -272,7 +286,6 @@ class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
         # TODO: use some tree-based data structure (BST?) if buffer performance becomes an issue
         buffer = []
         async with aiohttp.ClientSession() as client:
-            # TODO: as_completed only allows generators as input since python 3.12
             for res in asyncio.as_completed(
                 [
                     self.call_api(instance, client, i)
@@ -339,6 +352,7 @@ def bulk_call(
     # response_type: Literal["bytes", "str", "json", "raw"] = "json",
     **kwargs,
 ) -> ApicadabriBulkCallResponse:
+    # TODO allow to pass extra args to aiohttp.ClientSession.get/post
     semaphore = asyncio.Semaphore(max_active_calls)
 
     return ApicadabriBulkCallResponse(
