@@ -117,8 +117,10 @@ def test_multi_url_speed(mocker):
         pytest.param(
             1_000_000,
             1000,
-            300,
-            marks=pytest.mark.skip(reason="This test takes 300s to run, so we skip it by default."),
+            150,
+            marks=pytest.mark.skip(
+                reason="This test takes >100s to run, so we skip it by default.",
+            ),
         ),
     ],
 )

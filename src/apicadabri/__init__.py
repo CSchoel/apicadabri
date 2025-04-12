@@ -284,7 +284,7 @@ class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
     async def call_all(self):
         next_index = 0
         # TODO: use some tree-based data structure (BST?) if buffer performance becomes an issue
-        buffer = []
+        buffer: list[tuple[int, SyncedClientResponse]] = []
         async with aiohttp.ClientSession() as client:
             for res in asyncio.as_completed(
                 [
@@ -293,10 +293,10 @@ class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
                 ],
             ):
                 current_index, current_res = await res
-                insort_right(buffer, (current_index, current_res))
+                insort_right(buffer, (current_index, current_res), key=lambda x: -x[0])
                 while current_index == next_index:
-                    yield buffer.pop(0)[1]
-                    current_index = buffer[0][0] if len(buffer) > 0 else -1
+                    yield buffer.pop()[1]
+                    current_index = buffer[-1][0] if len(buffer) > 0 else -1
                     next_index += 1
 
     def json(self) -> ApicadabriResponse[Any]:
