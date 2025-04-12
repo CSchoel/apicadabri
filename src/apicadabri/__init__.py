@@ -16,32 +16,12 @@ from aiohttp.client_reqrep import ContentDisposition
 from aiohttp.connector import Connection
 from aiohttp.typedefs import RawHeaders
 from multidict import CIMultiDictProxy, MultiDictProxy
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 # source: https://stackoverflow.com/a/76646986
 # NOTE: we could use "JSON" instead of Any here to define a recursive type
 # however, this won't work with pydantic, so we settle for a shallow representation here
 JSON: TypeAlias = dict[str, Any] | list[Any] | str | int | float | bool | None
-
-
-# TODO limit max tasks committed to memory
-# idea:
-# - use batches of 10k or 100k tasks
-# - start new batch when all of the following apply
-#   - all batches before the last one have been completed
-#   - the last batch has less than max_active_calls items left
-# - share the semaphore between batches
-# This requires the following changes:
-# - track completion percentage of batches
-# - use Runner to issue multiple bulk_call instances as batches
-# - add runner and semaphore as optional args to bulk_call
-
-# TODO allow direct output to pandas or polars? (maybe as extras?)
-
-# TODO add tqdm
-
-# TODO turn TODOs into issues
-
 
 A = TypeVar("A")
 
@@ -66,10 +46,34 @@ class ApicadabriCallArguments(BaseModel):
     header_sets: Iterable[dict[str, str]] | None
     mode: Literal["zip", "product", "pipeline"]
 
-    # TODO: Validate
-    # - At least one not None
-    # - Not _both_ list variant and single variant given
-    # TODO: Get size if inputs are sized
+    @model_validator(mode="after")
+    def validate_not_both_none(self):
+        if self.url is None and self.urls is None:
+            msg = "One of `url` or `urls` must be provided."
+            raise ValidationError(msg)
+        if self.params is None and self.param_sets is None:
+            self.params = {}
+        if self.json_data is None and self.json_sets is None:
+            self.json_data = {}
+        if self.headers is None and self.header_sets is None:
+            self.headers = {}
+        return self
+
+    @model_validator(mode="after")
+    def validate_only_one_provided(self):
+        if self.url is not None and self.urls is not None:
+            msg = "You cannot specify both `url` and `urls`."
+            raise ValidationError(msg)
+        if self.params is not None and self.param_sets is not None:
+            msg = "You cannot specify both `param` and `param_sets`."
+            raise ValidationError(msg)
+        if self.json_data is not None and self.json_sets is not None:
+            msg = "You cannot specify both `json` and `json_sets`."
+            raise ValidationError(msg)
+        if self.headers is not None and self.header_sets is not None:
+            msg = "You cannot specify both `header` and `header_sets`."
+            raise ValidationError(msg)
+        return self
 
     def __iter__(self):
         iterables = (
@@ -283,7 +287,6 @@ class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
 
     async def call_all(self):
         next_index = 0
-        # TODO: use some tree-based data structure (BST?) if buffer performance becomes an issue
         buffer: list[tuple[int, SyncedClientResponse]] = []
         async with aiohttp.ClientSession() as client:
             for res in asyncio.as_completed(
