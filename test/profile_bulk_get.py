@@ -2,6 +2,7 @@ import asyncio
 import cProfile
 import json
 from collections.abc import Callable
+from unittest.mock import MagicMock
 
 import aiohttp
 
@@ -13,6 +14,10 @@ class MockResponse:
         self._text = text
         self.status = status
         self.latency = latency
+        self.content = MagicMock()
+
+    async def read(self):
+        return self._text.encode("utf-8")
 
     async def maybe_sleep(self):
         if not isinstance(self.latency, (float, int)):
@@ -33,6 +38,9 @@ class MockResponse:
 
     async def __aenter__(self):
         return self
+
+    def get_encoding(self) -> str:
+        return "utf-8"
 
 
 def profile_run():
