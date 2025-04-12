@@ -41,6 +41,9 @@ class MockResponse:
     async def __aenter__(self):
         return self
 
+    def get_encoding(self) -> str:
+        return "utf-8"
+
 
 def test_multi_url():
     pokemon = ["bulbasaur", "squirtle", "charmander"]
