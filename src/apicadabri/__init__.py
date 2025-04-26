@@ -146,13 +146,19 @@ class ApicadabriResponse(Generic[R]):
         """Apply a function to the response."""
         return ApicadabriMapResponse(self, func)
 
-    def map_safe(self, map_func: Callable[[R], S], error_func: Callable[[R, BaseException], S]) -> "ApicadabriResponse[S]":
+    def map_safe(
+        self,
+        map_func: Callable[[R], S],
+        error_func: Callable[[R, BaseException], S],
+    ) -> "ApicadabriResponse[S]":
         return ApicadabriSafeMapResponse(self, map_func, error_func)
 
-    def map_maybe(self, func: Callable[[R], S]) -> "ApicadabriResponse[S | ApicadabriErrorResponse[R]]":
+    def map_maybe(
+        self,
+        func: Callable[[R], S],
+    ) -> "ApicadabriResponse[S | ApicadabriErrorResponse[R]]":
         """Apply a function to the response."""
         return ApicadabriMaybeMapResponse(self, func)
-
 
     @abstractmethod
     def call_all(self) -> AsyncGenerator[R, None]:
@@ -168,9 +174,8 @@ class ApicadabriResponse(Generic[R]):
                 self.reduce_safe(
                     lambda _, r: f.write(json.dumps(r) + "\n"),
                     start=0,
-                    # todo allow error_values that don't contain the keys
-                    lambda _, r, e: f.write(error_value.format(result=r, exception=e))
-                )
+                    error_func=lambda _, r, e: f.write(error_value.format(result=r, exception=e)),
+                ),
             )
 
     def to_list(self) -> list[R]:
@@ -188,7 +193,12 @@ class ApicadabriResponse(Generic[R]):
             accumulated = accumulator(accumulated, res)
         return accumulated
 
-    async def reduce_safe(self, accumulator: Callable[[A, R], A], start: A, error_func: Callable[[A, R, BaseException], A]) -> A:
+    async def reduce_safe(
+        self,
+        accumulator: Callable[[A, R], A],
+        start: A,
+        error_func: Callable[[A, R, BaseException], A],
+    ) -> A:
         accumulated = start
         async for res in self.call_all():
             try:
@@ -198,7 +208,6 @@ class ApicadabriResponse(Generic[R]):
         return accumulated
 
 
-# TODO: create a map_safe variant that takes a second function to handle errors
 class ApicadabriMapResponse(ApicadabriResponse[S], Generic[R, S]):
     def __init__(self, base: ApicadabriResponse[R], func: Callable[[R], S]):
         self.func = func
@@ -211,8 +220,14 @@ class ApicadabriMapResponse(ApicadabriResponse[S], Generic[R, S]):
             mapped = self.func(res)
             yield mapped
 
+
 class ApicadabriSafeMapResponse(ApicadabriResponse[S], Generic[R, S]):
-    def __init__(self, base: ApicadabriResponse[R], map_func: Callable[[R], S], error_func: Callable[[R, BaseException], S]):
+    def __init__(
+        self,
+        base: ApicadabriResponse[R],
+        map_func: Callable[[R], S],
+        error_func: Callable[[R, BaseException], S],
+    ):
         self.map_func = map_func
         self.error_func = error_func
         self.base = base
@@ -226,6 +241,7 @@ class ApicadabriSafeMapResponse(ApicadabriResponse[S], Generic[R, S]):
             except BaseException as e:  # noqa: BLE001
                 yield self.error_func(res, e)
 
+
 class ApicadabriErrorResponse(BaseModel, Generic[R]):
     type: str
     message: str
@@ -238,15 +254,16 @@ class ApicadabriErrorResponse(BaseModel, Generic[R]):
             type=e.__class__.__name__,
             message=str(e),
             traceback=traceback.format_exc(),
-            triggering_input=triggering_input
+            triggering_input=triggering_input,
         )
+
 
 class ApicadabriMaybeMapResponse(ApicadabriResponse[S | ApicadabriErrorResponse[R]], Generic[R, S]):
     def __init__(self, base: ApicadabriResponse[R], func: Callable[[R], S]):
         self.func = func
         self.base = base
 
-    async def call_all(self) -> AsyncGenerator[S | ApicadabriErrorResponse], None]:
+    async def call_all(self) -> AsyncGenerator[S | ApicadabriErrorResponse, None]:
         """Return an iterator that yields the results of the API calls."""
         async for res in self.base.call_all():
             # if this raises an exception, the pipeline will just break
@@ -255,6 +272,7 @@ class ApicadabriMaybeMapResponse(ApicadabriResponse[S | ApicadabriErrorResponse[
                 yield mapped
             except BaseException as e:
                 yield ApicadabriErrorResponse.from_exception(e, res)
+
 
 class SyncedClientResponse:
     def __init__(self, base: aiohttp.ClientResponse, body: bytes, *, is_exception: bool = False):
