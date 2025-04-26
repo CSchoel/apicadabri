@@ -64,3 +64,23 @@ def test_simple_map(mocker):
         .to_list()
     )
     assert data == pokemon
+
+def test_simple_map_error(mocker):
+    pokemon = ["bulbasaur", "squirtle", "charmander"]
+
+    mocker.patch(
+        "aiohttp.ClientSession.get",
+        side_effect=lambda *args, **kwargs: MockResponse(
+            "{}" if "squirtle" in kwargs["url"] else json.dumps({"name": kwargs["url"].split("/")[-1]}),
+            200,
+        ),
+    )
+    with pytest.raises(KeyError):
+   		data = (
+     	    apicadabri.bulk_get(
+    	       urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
+ 	        )
+    	    .json()
+   		    .map(lambda res: res["name"])
+    	    .to_list()
+        )
