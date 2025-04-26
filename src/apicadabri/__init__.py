@@ -146,6 +146,9 @@ class ApicadabriResponse(Generic[R]):
         """Apply a function to the response."""
         return ApicadabriMapResponse(self, func)
 
+    def map_safe(self, map_func: Callable[[R], S], error_func: Callable[[R, BaseException], S]) -> "ApicadabriResponse[S]":
+        return ApicadabriSafeMapResponse(self, map_func, error_func)
+
     @abstractmethod
     def call_all(self) -> AsyncGenerator[R, None]:
         """Return an iterator that yields the results of the API calls."""
