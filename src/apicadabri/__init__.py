@@ -215,6 +215,21 @@ class ApicadabriErrorResponse(BaseModel, Generic[R]):
             triggering_input=triggering_input
         )
 
+class ApicadabriMaybeMapResponse(ApicadabriResponse[S | ApicadabriErrorResponse[R]], Generic[R, S]):
+    def __init__(self, base: ApicadabriResponse[R], func: Callable[[R], S]):
+        self.func = func
+        self.base = base
+
+    async def call_all(self) -> AsyncGenerator[S | ApicadabriErrorResponse], None]:
+        """Return an iterator that yields the results of the API calls."""
+        async for res in self.base.call_all():
+            # if this raises an exception, the pipeline will just break
+            try:
+                mapped = self.func(res)
+                yield mapped
+            except BaseException as e:
+                yield ApicadabriErrorResponse.from_exception(e)
+
 class SyncedClientResponse:
     def __init__(self, base: aiohttp.ClientResponse, body: bytes, *, is_exception: bool = False):
         self.base = base
