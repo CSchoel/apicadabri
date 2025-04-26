@@ -35,20 +35,6 @@ def exception_to_json(e: BaseException) -> dict[str, str]:
     }
 
 
-class ApicadabriErrorResponse(BaseModel):
-    type: str
-    message: str
-    traceback: str
-
-    @classmethod
-    def from_exception(cls, e: BaseException) -> "ApicadabriErrorResponse":
-        return ApicadabriErrorResponse(
-            type=e.__class__.__name__,
-            message=str(e),
-            traceback=traceback.format_exc(),
-        )
-
-
 class ApicadabriCallInstance(BaseModel):
     url: str
     params: dict[str, str]
@@ -214,6 +200,20 @@ class ApicadabriSafeMapResponse(ApicadabriResponse[S], Generic[R, S]):
             except BaseException as e:  # noqa: BLE001
                 yield self.error_func(res, e)
 
+class ApicadabriErrorResponse(BaseModel, Generic[R]):
+    type: str
+    message: str
+    traceback: str
+    triggering_input: R
+
+    @classmethod
+    def from_exception(cls, e: BaseException, triggering_input: R) -> "ApicadabriErrorResponse[R]":
+        return ApicadabriErrorResponse(
+            type=e.__class__.__name__,
+            message=str(e),
+            traceback=traceback.format_exc(),
+            triggering_input=triggering_input
+        )
 
 class SyncedClientResponse:
     def __init__(self, base: aiohttp.ClientResponse, body: bytes, *, is_exception: bool = False):
