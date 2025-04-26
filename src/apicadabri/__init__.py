@@ -210,6 +210,16 @@ class ApicadabriSafeMapResponse(ApicadabriResponse[S], Generic[R, S]):
         self.error_func = error_func
         self.base = base
 
+    async def call_all(self) -> AsyncGenerator[S, None]:
+        """Return an iterator that yields the results of the API calls."""
+        async for res in self.base.call_all():
+            try:
+                mapped = self.map_func(res)
+                yield mapped
+            except BaseException as e:  # noqa: BLE001
+                yield self.error_func(res, e)
+
+
 class SyncedClientResponse:
     def __init__(self, base: aiohttp.ClientResponse, body: bytes, *, is_exception: bool = False):
         self.base = base
