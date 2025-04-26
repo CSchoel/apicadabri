@@ -1,7 +1,7 @@
+"""Tests for map functions."""
+
 import asyncio
 import json
-import random
-import time
 from collections.abc import Callable
 from unittest.mock import MagicMock
 
@@ -65,25 +65,29 @@ def test_simple_map(mocker):
     )
     assert data == pokemon
 
+
 def test_simple_map_error(mocker):
     pokemon = ["bulbasaur", "squirtle", "charmander"]
 
     mocker.patch(
         "aiohttp.ClientSession.get",
         side_effect=lambda *args, **kwargs: MockResponse(
-            "{}" if "squirtle" in kwargs["url"] else json.dumps({"name": kwargs["url"].split("/")[-1]}),
+            "{}"
+            if "squirtle" in kwargs["url"]
+            else json.dumps({"name": kwargs["url"].split("/")[-1]}),
             200,
         ),
     )
     with pytest.raises(KeyError):
-   		data = (
-     	    apicadabri.bulk_get(
-    	       urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
- 	        )
-    	    .json()
-   		    .map(lambda res: res["name"])
-    	    .to_list()
+        _ = (
+            apicadabri.bulk_get(
+                urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
+            )
+            .json()
+            .map(lambda res: res["name"])
+            .to_list()
         )
+
 
 def test_safe_map_error(mocker):
     pokemon = ["bulbasaur", "squirtle", "charmander"]
@@ -91,19 +95,22 @@ def test_safe_map_error(mocker):
     mocker.patch(
         "aiohttp.ClientSession.get",
         side_effect=lambda *args, **kwargs: MockResponse(
-            "{}" if "squirtle" in kwargs["url"] else json.dumps({"name": kwargs["url"].split("/")[-1]}),
+            "{}"
+            if "squirtle" in kwargs["url"]
+            else json.dumps({"name": kwargs["url"].split("/")[-1]}),
             200,
         ),
     )
-   	data = (
- 	    apicadabri.bulk_get(
+    data = (
+        apicadabri.bulk_get(
             urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
- 	    )
-    	.json()
-   		.map_safe(lambda res: res["name"], lambda res, e: str(e))
-    	.to_list()
+        )
+        .json()
+        .map_safe(lambda res: res["name"], lambda res, e: str(e))
+        .to_list()
     )
     assert data == ["bulbasaur", 'key "name" not found', "charmander"]
+
 
 def test_map_maybe_error(mocker):
     pokemon = ["bulbasaur", "squirtle", "charmander"]
@@ -111,19 +118,20 @@ def test_map_maybe_error(mocker):
     mocker.patch(
         "aiohttp.ClientSession.get",
         side_effect=lambda *args, **kwargs: MockResponse(
-            "{}" if "squirtle" in kwargs["url"] else json.dumps({"name": kwargs["url"].split("/")[-1]}),
+            "{}"
+            if "squirtle" in kwargs["url"]
+            else json.dumps({"name": kwargs["url"].split("/")[-1]}),
             200,
         ),
     )
-   	data = (
- 	    apicadabri.bulk_get(
+    data = (
+        apicadabri.bulk_get(
             urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
- 	    )
-    	.json()
-   		.map_maybe(lambda res: res["name"])
-    	.to_list()
+        )
+        .json()
+        .map_maybe(lambda res: res["name"])
+        .to_list()
     )
     assert data[0] == "bulbasaur"
     assert data[2] == "charmander"
-    assert data[1] 
-
+    assert data[1]
