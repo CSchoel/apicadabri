@@ -159,10 +159,19 @@ class ApicadabriResponse(Generic[R]):
         """Return an iterator that yields the results of the API calls."""
         ...
 
-    def to_jsonl(self, filename: Path | str) -> None:
+    def to_jsonl(self, filename: Path | str, error_value: str | None = None) -> None:
+        if error_value is None:
+            error_value = "{{}}\n"
         filename_path = Path(filename)
         with filename_path.open("w", encoding="utf-8") as f:
-            asyncio.run(self.reduce(lambda _, r: f.write(json.dumps(r) + "\n"), start=0))
+            asyncio.run(
+                self.reduce_safe(
+                    lambda _, r: f.write(json.dumps(r) + "\n"),
+                    start=0,
+                    # todo allow error_values that don't contain the keys
+                    lambda _, r, e: f.write(error_value.format(result=r, exception=e))
+                )
+            )
 
     def to_list(self) -> list[R]:
         start: list[R] = []
@@ -177,6 +186,15 @@ class ApicadabriResponse(Generic[R]):
         accumulated = start
         async for res in self.call_all():
             accumulated = accumulator(accumulated, res)
+        return accumulated
+
+    async def reduce_safe(self, accumulator: Callable[[A, R], A], start: A, error_func: Callable[[A, R, BaseException], A]) -> A:
+        accumulated = start
+        async for res in self.call_all():
+            try:
+                accumulated = accumulator(accumulated, res)
+            except BaseException as e:
+                accumulated = error_func(accumulated, res, e)
         return accumulated
 
 
@@ -236,7 +254,7 @@ class ApicadabriMaybeMapResponse(ApicadabriResponse[S | ApicadabriErrorResponse[
                 mapped = self.func(res)
                 yield mapped
             except BaseException as e:
-                yield ApicadabriErrorResponse.from_exception(e)
+                yield ApicadabriErrorResponse.from_exception(e, res)
 
 class SyncedClientResponse:
     def __init__(self, base: aiohttp.ClientResponse, body: bytes, *, is_exception: bool = False):
