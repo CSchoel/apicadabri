@@ -195,14 +195,9 @@ class ApicadabriMapResponse(ApicadabriResponse[S], Generic[R, S]):
     async def call_all(self) -> AsyncGenerator[S, None]:
         """Return an iterator that yields the results of the API calls."""
         async for res in self.base.call_all():
-            try:
-                mapped = self.func(res)
-                yield mapped
-            except BaseException as e:  # noqa: BLE001
-                if isinstance(res, dict):
-                    res_with_exception = res.copy()
-                    res_with_exception.setdefault("exceptions", []).append(exception_to_json(e))
-                    yield res_with_exception
+            # if this raises an exception, the pipeline will just break
+            mapped = self.func(res)
+            yield mapped
 
 class ApicadabriSafeMapResponse(ApicadabriResponse[S], Generic[R, S]):
     def __init__(self, base: ApicadabriResponse[R], map_func: Callable[[R], S], error_func: Callable[[R, BaseException], S]):
