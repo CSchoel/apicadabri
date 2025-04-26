@@ -106,10 +106,10 @@ def test_safe_map_error(mocker):
             urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
         )
         .json()
-        .map_safe(lambda res: res["name"], lambda res, e: str(e))
+        .map_safe(lambda res: res["name"], lambda _, e: str(e))
         .to_list()
     )
-    assert data == ["bulbasaur", 'key "name" not found', "charmander"]
+    assert data == ["bulbasaur", "'name'", "charmander"]
 
 
 def test_map_maybe_error(mocker):
@@ -134,4 +134,5 @@ def test_map_maybe_error(mocker):
     )
     assert data[0] == "bulbasaur"
     assert data[2] == "charmander"
-    assert data[1]
+    assert isinstance(data[1], apicadabri.ApicadabriErrorResponse)
+    assert data[1].type == "KeyError"
