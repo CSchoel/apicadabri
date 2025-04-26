@@ -204,6 +204,11 @@ class ApicadabriMapResponse(ApicadabriResponse[S], Generic[R, S]):
                     res_with_exception.setdefault("exceptions", []).append(exception_to_json(e))
                     yield res_with_exception
 
+class ApicadabriSafeMapResponse(ApicadabriResponse[S], Generic[R, S]):
+    def __init__(self, base: ApicadabriResponse[R], map_func: Callable[[R], S], error_func: Callable[[R, BaseException], S]):
+        self.map_func = map_func
+        self.error_func = error_func
+        self.base = base
 
 class SyncedClientResponse:
     def __init__(self, base: aiohttp.ClientResponse, body: bytes, *, is_exception: bool = False):
