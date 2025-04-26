@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import traceback
 from abc import abstractmethod
 from bisect import insort_right
 from collections.abc import AsyncGenerator, Callable, Generator, Iterable
@@ -24,6 +25,28 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 JSON: TypeAlias = dict[str, Any] | list[Any] | str | int | float | bool | None
 
 A = TypeVar("A")
+
+
+def exception_to_json(e: BaseException) -> dict[str, str]:
+    return {
+        "type": e.__class__.__name__,
+        "message": str(e),
+        "traceback": traceback.format_exc(),
+    }
+
+
+class ApicadabriErrorResponse(BaseModel):
+    type: str
+    message: str
+    traceback: str
+
+    @classmethod
+    def from_exception(cls, e: BaseException) -> "ApicadabriErrorResponse":
+        return ApicadabriErrorResponse(
+            type=e.__class__.__name__,
+            message=str(e),
+            traceback=traceback.format_exc(),
+        )
 
 
 class ApicadabriCallInstance(BaseModel):
@@ -163,6 +186,7 @@ class ApicadabriResponse(Generic[R]):
         return accumulated
 
 
+# TODO: create a map_safe variant that takes a second function to handle errors
 class ApicadabriMapResponse(ApicadabriResponse[S], Generic[R, S]):
     def __init__(self, base: ApicadabriResponse[R], func: Callable[[R], S]):
         self.func = func
@@ -171,14 +195,21 @@ class ApicadabriMapResponse(ApicadabriResponse[S], Generic[R, S]):
     async def call_all(self) -> AsyncGenerator[S, None]:
         """Return an iterator that yields the results of the API calls."""
         async for res in self.base.call_all():
-            mapped = self.func(res)
-            yield mapped
+            try:
+                mapped = self.func(res)
+                yield mapped
+            except BaseException as e:  # noqa: BLE001
+                if isinstance(res, dict):
+                    res_with_exception = res.copy()
+                    res_with_exception.setdefault("exceptions", []).append(exception_to_json(e))
+                    yield res_with_exception
 
 
 class SyncedClientResponse:
-    def __init__(self, base: aiohttp.ClientResponse, body: bytes):
+    def __init__(self, base: aiohttp.ClientResponse, body: bytes, *, is_exception: bool = False):
         self.base = base
         self.body = body
+        self.is_exception = is_exception
 
     @property
     def version(self) -> aiohttp.HttpVersion | None:
@@ -283,7 +314,23 @@ class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
     ) -> tuple[int, SyncedClientResponse]:
         aiohttp_method = session.post if self.method == "POST" else session.get
         async with self.semaphore, aiohttp_method(**args.model_dump(by_alias=True)) as resp, resp:
-            return (index, SyncedClientResponse(resp, await resp.read()))
+            try:
+                return (index, SyncedClientResponse(resp, await resp.read()))
+            except BaseException as e:  # noqa: BLE001
+                return (
+                    index,
+                    SyncedClientResponse(
+                        resp,
+                        json.dumps(
+                            {
+                                "exceptions": [exception_to_json(e)],
+                            },
+                        ).encode(
+                            resp.get_encoding(),
+                        ),
+                        is_exception=True,
+                    ),
+                )
 
     async def call_all(self):
         next_index = 0
