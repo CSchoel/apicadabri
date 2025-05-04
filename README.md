@@ -1,3 +1,7 @@
+[![build](https://github.com/CSchoel/apicadabri/actions/workflows/ci.yaml/badge.svg)](https://github.com/CSchoel/apicadabri/actions/workflows/ci.yaml)
+[![codecov](https://codecov.io/gh/CSchoel/apicadabri/graph/badge.svg?token=2VMDQFXK3V)](https://codecov.io/gh/CSchoel/apicadabri)
+
+
 # Apicadabri
 
 Apicadabri is a magical set of tools to interact with APIs from a data scientist's perspective to "just get the damn data"™.
