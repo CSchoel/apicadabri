@@ -38,8 +38,6 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-
 ]
 requires-python = ">=3.11"
 dependencies = [
@@ -92,4 +90,9 @@ indent-style = "space"
 ]
 
 [dependency-groups]
-dev = ["pytest>=8.3.5", "pytest-mock>=3.14.0", "ruff>=0.11.4"]
+dev = [
+    "keepachangelog>=2.0.0",
+    "pytest>=8.3.5",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.11.4",
+]
