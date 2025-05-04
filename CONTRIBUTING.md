@@ -15,10 +15,11 @@ This document currently mainly contains small code snippets to remind myself how
    - Don't forget to also update the links at the bottom.
 5. Update the version number in `pyproject.toml`
 6. `git checkout main`
-7. `git tag vX.Y.Z`
-8. `git push vX.Y.Z`
-9. Add your (Test)PyPI credentials to a `.env` file.
-10. Execute the following:
+7. `git pull`
+8. `git tag vX.Y.Z`
+9. `git push origin vX.Y.Z`
+10. Add your (Test)PyPI credentials to a `.env` file.
+11. Execute the following:
 
     ```bash
     source .env
@@ -26,3 +27,4 @@ This document currently mainly contains small code snippets to remind myself how
     uv publish --index testpypi  # for testing
     uv publish                   # the real deal
     ```
+12. Test that everything works with `uv run --with apicadabri --no-project -- python -c "import apicadabri; print('Everything okay.')"`
