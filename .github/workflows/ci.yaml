@@ -1,0 +1,27 @@
+on:
+  push:
+    branches: ["main", "dev", "v*", "error_handling"]
+  pull_request:
+
+name: build
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        python: ["3.11", "3.13"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - run: uv run pytest --cov --cov-branch --cov-report=xml
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+        if: ${{ matrix.python == '3.11' }}

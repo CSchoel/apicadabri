@@ -2,13 +2,14 @@
 
 import asyncio
 import json
+import traceback
 from abc import abstractmethod
 from bisect import insort_right
-from collections.abc import AsyncGenerator, Callable, Generator, Iterable
+from collections.abc import AsyncGenerator, Callable, Iterable
 from http.cookies import SimpleCookie
 from itertools import product, repeat
 from pathlib import Path
-from typing import Any, Generic, Literal, Self, TypeAlias, TypeVar
+from typing import Any, Generic, Literal, TypeAlias, TypeVar, overload
 
 import aiohttp
 import yarl
@@ -24,6 +25,14 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 JSON: TypeAlias = dict[str, Any] | list[Any] | str | int | float | bool | None
 
 A = TypeVar("A")
+
+
+def exception_to_json(e: Exception) -> dict[str, str]:
+    return {
+        "type": e.__class__.__name__,
+        "message": str(e),
+        "traceback": traceback.format_exc(),
+    }
 
 
 class ApicadabriCallInstance(BaseModel):
@@ -133,19 +142,49 @@ class ApicadabriResponse(Generic[R]):
     def __init__(self):
         pass
 
-    def map(self, func: Callable[[R], S]) -> "ApicadabriResponse[S]":
+    @overload
+    def map(
+        self,
+        func: Callable[[R], S],
+        on_error: Literal["raise"] | Callable[[R, Exception], S] = "raise",
+    ) -> "ApicadabriResponse[S]": ...
+
+    @overload
+    def map(
+        self,
+        func: Callable[[R], S],
+        on_error: Literal["return"],
+    ) -> "ApicadabriResponse[S | ApicadabriErrorResponse[R]]": ...
+
+    def map(
+        self,
+        func: Callable[[R], S],
+        on_error: Literal["raise", "return"] | Callable[[R, Exception], S] = "raise",
+    ) -> "ApicadabriResponse[S] | ApicadabriResponse[S | ApicadabriErrorResponse[R]]":
         """Apply a function to the response."""
-        return ApicadabriMapResponse(self, func)
+        if on_error == "raise":
+            return ApicadabriMapResponse(self, func)
+        if on_error == "return":
+            return ApicadabriMaybeMapResponse(self, func)
+        return ApicadabriSafeMapResponse(self, func, on_error)
 
     @abstractmethod
     def call_all(self) -> AsyncGenerator[R, None]:
         """Return an iterator that yields the results of the API calls."""
         ...
 
-    def to_jsonl(self, filename: Path | str) -> None:
+    def to_jsonl(self, filename: Path | str, error_value: str | None = None) -> None:
+        if error_value is None:
+            error_value = "{{}}\n"
         filename_path = Path(filename)
         with filename_path.open("w", encoding="utf-8") as f:
-            asyncio.run(self.reduce(lambda _, r: f.write(json.dumps(r) + "\n"), start=0))
+            asyncio.run(
+                self.reduce(
+                    lambda _, r: f.write(json.dumps(r) + "\n"),
+                    start=0,
+                    on_error=lambda _, r, e: f.write(error_value.format(result=r, exception=e)),
+                ),
+            )
 
     def to_list(self) -> list[R]:
         start: list[R] = []
@@ -156,10 +195,20 @@ class ApicadabriResponse(Generic[R]):
 
         return asyncio.run(self.reduce(appender, start=start))
 
-    async def reduce(self, accumulator: Callable[[A, R], A], start: A) -> A:
+    async def reduce(
+        self,
+        accumulator: Callable[[A, R], A],
+        start: A,
+        on_error: Literal["raise"] | Callable[[A, R, Exception], A] = "raise",
+    ) -> A:
         accumulated = start
         async for res in self.call_all():
-            accumulated = accumulator(accumulated, res)
+            try:
+                accumulated = accumulator(accumulated, res)
+            except Exception as e:
+                if on_error == "raise":
+                    raise e
+                accumulated = on_error(accumulated, res, e)
         return accumulated
 
 
@@ -171,14 +220,74 @@ class ApicadabriMapResponse(ApicadabriResponse[S], Generic[R, S]):
     async def call_all(self) -> AsyncGenerator[S, None]:
         """Return an iterator that yields the results of the API calls."""
         async for res in self.base.call_all():
+            # if this raises an exception, the pipeline will just break
             mapped = self.func(res)
             yield mapped
 
 
+class ApicadabriSafeMapResponse(ApicadabriResponse[S], Generic[R, S]):
+    def __init__(
+        self,
+        base: ApicadabriResponse[R],
+        map_func: Callable[[R], S],
+        error_func: Callable[[R, Exception], S],
+    ):
+        self.map_func = map_func
+        self.error_func = error_func
+        self.base = base
+
+    async def call_all(self) -> AsyncGenerator[S, None]:
+        """Return an iterator that yields the results of the API calls."""
+        async for res in self.base.call_all():
+            try:
+                mapped = self.map_func(res)
+                yield mapped
+            except Exception as e:  # noqa: BLE001
+                yield self.error_func(res, e)
+
+
+# TODO: Should this really be a pydantic class?
+class ApicadabriErrorResponse(BaseModel, Generic[R]):
+    type: str
+    message: str
+    traceback: str
+    triggering_input: R
+
+    # need to allow arbitrary types because triggering_input may not be a BaseModel
+    class Config:
+        arbitrary_types_allowed = True
+
+    @classmethod
+    def from_exception(cls, e: Exception, triggering_input: R) -> "ApicadabriErrorResponse[R]":
+        return ApicadabriErrorResponse(
+            type=e.__class__.__name__,
+            message=str(e),
+            traceback=traceback.format_exc(),
+            triggering_input=triggering_input,
+        )
+
+
+class ApicadabriMaybeMapResponse(ApicadabriResponse[S | ApicadabriErrorResponse[R]], Generic[R, S]):
+    def __init__(self, base: ApicadabriResponse[R], func: Callable[[R], S]):
+        self.func = func
+        self.base = base
+
+    async def call_all(self) -> AsyncGenerator[S | ApicadabriErrorResponse, None]:
+        """Return an iterator that yields the results of the API calls."""
+        async for res in self.base.call_all():
+            # if this raises an exception, the pipeline will just break
+            try:
+                mapped = self.func(res)
+                yield mapped
+            except Exception as e:
+                yield ApicadabriErrorResponse.from_exception(e, res)
+
+
 class SyncedClientResponse:
-    def __init__(self, base: aiohttp.ClientResponse, body: bytes):
+    def __init__(self, base: aiohttp.ClientResponse, body: bytes, *, is_exception: bool = False):
         self.base = base
         self.body = body
+        self.is_exception = is_exception
 
     @property
     def version(self) -> aiohttp.HttpVersion | None:
@@ -283,7 +392,23 @@ class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
     ) -> tuple[int, SyncedClientResponse]:
         aiohttp_method = session.post if self.method == "POST" else session.get
         async with self.semaphore, aiohttp_method(**args.model_dump(by_alias=True)) as resp, resp:
-            return (index, SyncedClientResponse(resp, await resp.read()))
+            try:
+                return (index, SyncedClientResponse(resp, await resp.read()))
+            except Exception as e:  # noqa: BLE001
+                return (
+                    index,
+                    SyncedClientResponse(
+                        resp,
+                        json.dumps(
+                            {
+                                "exceptions": [exception_to_json(e)],
+                            },
+                        ).encode(
+                            resp.get_encoding(),
+                        ),
+                        is_exception=True,
+                    ),
+                )
 
     async def call_all(self):
         next_index = 0
@@ -302,14 +427,55 @@ class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
                     current_index = buffer[-1][0] if len(buffer) > 0 else -1
                     next_index += 1
 
-    def json(self) -> ApicadabriResponse[Any]:
-        return self.map(SyncedClientResponse.json)
+    @overload
+    def json(
+        self,
+        on_error: Literal["raise"] | Callable[[SyncedClientResponse, Exception], Any] = "raise",
+    ) -> ApicadabriResponse[Any]: ...
 
-    def text(self) -> ApicadabriResponse[str]:
-        return self.map(SyncedClientResponse.text)
+    @overload
+    def json(
+        self,
+        on_error: Literal["return"],
+    ) -> ApicadabriResponse[Any | ApicadabriErrorResponse[Any]]: ...
+
+    def json(
+        self,
+        on_error: Literal["raise", "return"]
+        | Callable[[SyncedClientResponse, Exception], Any] = "raise",
+    ) -> (
+        ApicadabriResponse[Any]
+        | ApicadabriResponse[Any | ApicadabriErrorResponse[SyncedClientResponse]]
+    ):
+        return self.map(SyncedClientResponse.json, on_error=on_error)
+
+    @overload
+    def text(
+        self,
+        on_error: Literal["raise"] | Callable[[SyncedClientResponse, Exception], str] = "raise",
+    ) -> ApicadabriResponse[str]: ...
+
+    @overload
+    def text(
+        self,
+        on_error: Literal["return"],
+    ) -> ApicadabriResponse[str | ApicadabriErrorResponse[SyncedClientResponse]]: ...
+
+    def text(
+        self,
+        on_error: Literal["raise", "return"]
+        | Callable[[SyncedClientResponse, Exception], str] = "raise",
+    ) -> (
+        ApicadabriResponse[str]
+        | ApicadabriResponse[str | ApicadabriErrorResponse[SyncedClientResponse]]
+    ):
+        return self.map(SyncedClientResponse.text, on_error=on_error)
 
     def read(self) -> ApicadabriResponse[bytes]:
-        return self.map(SyncedClientResponse.read)
+        # SyncedClientResponse.read just returns an internal variable
+        # => there is no way this could raise an exception under normal circumstances
+        # => if it does, it is an implementation error and we should just raise it normally
+        return self.map(SyncedClientResponse.read, on_error="raise")
 
 
 def bulk_get(
