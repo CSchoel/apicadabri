@@ -1,6 +1,6 @@
 [![build](https://github.com/CSchoel/apicadabri/actions/workflows/ci.yaml/badge.svg)](https://github.com/CSchoel/apicadabri/actions/workflows/ci.yaml)
 [![codecov](https://codecov.io/gh/CSchoel/apicadabri/graph/badge.svg?token=2VMDQFXK3V)](https://codecov.io/gh/CSchoel/apicadabri)
-
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](code_of_conduct.md) 
 
 # Apicadabri
 
