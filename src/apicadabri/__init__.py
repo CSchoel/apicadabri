@@ -27,7 +27,7 @@ JSON: TypeAlias = dict[str, Any] | list[Any] | str | int | float | bool | None
 A = TypeVar("A")
 
 
-def exception_to_json(e: BaseException) -> dict[str, str]:
+def exception_to_json(e: Exception) -> dict[str, str]:
     return {
         "type": e.__class__.__name__,
         "message": str(e),
@@ -146,7 +146,7 @@ class ApicadabriResponse(Generic[R]):
     def map(
         self,
         func: Callable[[R], S],
-        on_error: Literal["raise"] | Callable[[R, BaseException], S] = "raise",
+        on_error: Literal["raise"] | Callable[[R, Exception], S] = "raise",
     ) -> "ApicadabriResponse[S]": ...
 
     @overload
@@ -159,7 +159,7 @@ class ApicadabriResponse(Generic[R]):
     def map(
         self,
         func: Callable[[R], S],
-        on_error: Literal["raise", "return"] | Callable[[R, BaseException], S] = "raise",
+        on_error: Literal["raise", "return"] | Callable[[R, Exception], S] = "raise",
     ) -> "ApicadabriResponse[S] | ApicadabriResponse[S | ApicadabriErrorResponse[R]]":
         """Apply a function to the response."""
         if on_error == "raise":
@@ -199,13 +199,13 @@ class ApicadabriResponse(Generic[R]):
         self,
         accumulator: Callable[[A, R], A],
         start: A,
-        on_error: Literal["raise"] | Callable[[A, R, BaseException], A] = "raise",
+        on_error: Literal["raise"] | Callable[[A, R, Exception], A] = "raise",
     ) -> A:
         accumulated = start
         async for res in self.call_all():
             try:
                 accumulated = accumulator(accumulated, res)
-            except BaseException as e:
+            except Exception as e:
                 if on_error == "raise":
                     raise e
                 accumulated = on_error(accumulated, res, e)
@@ -230,7 +230,7 @@ class ApicadabriSafeMapResponse(ApicadabriResponse[S], Generic[R, S]):
         self,
         base: ApicadabriResponse[R],
         map_func: Callable[[R], S],
-        error_func: Callable[[R, BaseException], S],
+        error_func: Callable[[R, Exception], S],
     ):
         self.map_func = map_func
         self.error_func = error_func
@@ -242,11 +242,11 @@ class ApicadabriSafeMapResponse(ApicadabriResponse[S], Generic[R, S]):
             try:
                 mapped = self.map_func(res)
                 yield mapped
-            except BaseException as e:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001
                 yield self.error_func(res, e)
 
 
-# TODO: Should this be a pydantic class?
+# TODO: Should this really be a pydantic class?
 class ApicadabriErrorResponse(BaseModel, Generic[R]):
     type: str
     message: str
@@ -258,7 +258,7 @@ class ApicadabriErrorResponse(BaseModel, Generic[R]):
         arbitrary_types_allowed = True
 
     @classmethod
-    def from_exception(cls, e: BaseException, triggering_input: R) -> "ApicadabriErrorResponse[R]":
+    def from_exception(cls, e: Exception, triggering_input: R) -> "ApicadabriErrorResponse[R]":
         return ApicadabriErrorResponse(
             type=e.__class__.__name__,
             message=str(e),
@@ -279,7 +279,7 @@ class ApicadabriMaybeMapResponse(ApicadabriResponse[S | ApicadabriErrorResponse[
             try:
                 mapped = self.func(res)
                 yield mapped
-            except BaseException as e:
+            except Exception as e:
                 yield ApicadabriErrorResponse.from_exception(e, res)
 
 
@@ -394,7 +394,7 @@ class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
         async with self.semaphore, aiohttp_method(**args.model_dump(by_alias=True)) as resp, resp:
             try:
                 return (index, SyncedClientResponse(resp, await resp.read()))
-            except BaseException as e:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001
                 return (
                     index,
                     SyncedClientResponse(
@@ -430,7 +430,7 @@ class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
     @overload
     def json(
         self,
-        on_error: Literal["raise"] | Callable[[SyncedClientResponse, BaseException], Any] = "raise",
+        on_error: Literal["raise"] | Callable[[SyncedClientResponse, Exception], Any] = "raise",
     ) -> ApicadabriResponse[Any]: ...
 
     @overload
@@ -442,7 +442,7 @@ class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
     def json(
         self,
         on_error: Literal["raise", "return"]
-        | Callable[[SyncedClientResponse, BaseException], Any] = "raise",
+        | Callable[[SyncedClientResponse, Exception], Any] = "raise",
     ) -> (
         ApicadabriResponse[Any]
         | ApicadabriResponse[Any | ApicadabriErrorResponse[SyncedClientResponse]]
@@ -452,7 +452,7 @@ class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
     @overload
     def text(
         self,
-        on_error: Literal["raise"] | Callable[[SyncedClientResponse, BaseException], str] = "raise",
+        on_error: Literal["raise"] | Callable[[SyncedClientResponse, Exception], str] = "raise",
     ) -> ApicadabriResponse[str]: ...
 
     @overload
@@ -464,7 +464,7 @@ class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
     def text(
         self,
         on_error: Literal["raise", "return"]
-        | Callable[[SyncedClientResponse, BaseException], str] = "raise",
+        | Callable[[SyncedClientResponse, Exception], str] = "raise",
     ) -> (
         ApicadabriResponse[str]
         | ApicadabriResponse[str | ApicadabriErrorResponse[SyncedClientResponse]]
