@@ -146,7 +146,7 @@ class ApicadabriResponse(Generic[R]):
     def map(
         self,
         func: Callable[[R], S],
-        on_error: Literal["raise"] = "raise",
+        on_error: Literal["raise"] | Callable[[R, BaseException], S] = "raise",
     ) -> "ApicadabriResponse[S]": ...
 
     @overload
@@ -155,13 +155,6 @@ class ApicadabriResponse(Generic[R]):
         func: Callable[[R], S],
         on_error: Literal["return"],
     ) -> "ApicadabriResponse[S | ApicadabriErrorResponse[R]]": ...
-
-    @overload
-    def map(
-        self,
-        func: Callable[[R], S],
-        on_error: Callable[[R, BaseException], S],
-    ) -> "ApicadabriResponse[S]": ...
 
     def map(
         self,
@@ -186,10 +179,10 @@ class ApicadabriResponse(Generic[R]):
         filename_path = Path(filename)
         with filename_path.open("w", encoding="utf-8") as f:
             asyncio.run(
-                self.reduce_safe(
+                self.reduce(
                     lambda _, r: f.write(json.dumps(r) + "\n"),
                     start=0,
-                    error_func=lambda _, r, e: f.write(error_value.format(result=r, exception=e)),
+                    on_error=lambda _, r, e: f.write(error_value.format(result=r, exception=e)),
                 ),
             )
 
@@ -202,24 +195,20 @@ class ApicadabriResponse(Generic[R]):
 
         return asyncio.run(self.reduce(appender, start=start))
 
-    async def reduce(self, accumulator: Callable[[A, R], A], start: A) -> A:
-        accumulated = start
-        async for res in self.call_all():
-            accumulated = accumulator(accumulated, res)
-        return accumulated
-
-    async def reduce_safe(
+    async def reduce(
         self,
         accumulator: Callable[[A, R], A],
         start: A,
-        error_func: Callable[[A, R, BaseException], A],
+        on_error: Literal["raise"] | Callable[[A, R, BaseException], A] = "raise",
     ) -> A:
         accumulated = start
         async for res in self.call_all():
             try:
                 accumulated = accumulator(accumulated, res)
             except BaseException as e:
-                accumulated = error_func(accumulated, res, e)
+                if on_error == "raise":
+                    raise e
+                accumulated = on_error(accumulated, res, e)
         return accumulated
 
 
@@ -257,11 +246,16 @@ class ApicadabriSafeMapResponse(ApicadabriResponse[S], Generic[R, S]):
                 yield self.error_func(res, e)
 
 
+# TODO: Should this be a pydantic class?
 class ApicadabriErrorResponse(BaseModel, Generic[R]):
     type: str
     message: str
     traceback: str
     triggering_input: R
+
+    # need to allow arbitrary types because triggering_input may not be a BaseModel
+    class Config:
+        arbitrary_types_allowed = True
 
     @classmethod
     def from_exception(cls, e: BaseException, triggering_input: R) -> "ApicadabriErrorResponse[R]":
@@ -433,16 +427,55 @@ class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
                     current_index = buffer[-1][0] if len(buffer) > 0 else -1
                     next_index += 1
 
-    # TODO: add on_error parameter
-    def json(self) -> ApicadabriResponse[Any]:
-        return self.map(SyncedClientResponse.json)
+    @overload
+    def json(
+        self,
+        on_error: Literal["raise"] | Callable[[SyncedClientResponse, BaseException], Any] = "raise",
+    ) -> ApicadabriResponse[Any]: ...
 
-    # TODO: add on_error parameter
-    def text(self) -> ApicadabriResponse[str]:
-        return self.map(SyncedClientResponse.text)
+    @overload
+    def json(
+        self,
+        on_error: Literal["return"],
+    ) -> ApicadabriResponse[Any | ApicadabriErrorResponse[Any]]: ...
+
+    def json(
+        self,
+        on_error: Literal["raise", "return"]
+        | Callable[[SyncedClientResponse, BaseException], Any] = "raise",
+    ) -> (
+        ApicadabriResponse[Any]
+        | ApicadabriResponse[Any | ApicadabriErrorResponse[SyncedClientResponse]]
+    ):
+        return self.map(SyncedClientResponse.json, on_error=on_error)
+
+    @overload
+    def text(
+        self,
+        on_error: Literal["raise"] | Callable[[SyncedClientResponse, BaseException], str] = "raise",
+    ) -> ApicadabriResponse[str]: ...
+
+    @overload
+    def text(
+        self,
+        on_error: Literal["return"],
+    ) -> ApicadabriResponse[str | ApicadabriErrorResponse[SyncedClientResponse]]: ...
+
+    def text(
+        self,
+        on_error: Literal["raise", "return"]
+        | Callable[[SyncedClientResponse, BaseException], str] = "raise",
+    ) -> (
+        ApicadabriResponse[str]
+        | ApicadabriResponse[str | ApicadabriErrorResponse[SyncedClientResponse]]
+    ):
+        return self.map(SyncedClientResponse.text, on_error=on_error)
 
     def read(self) -> ApicadabriResponse[bytes]:
-        return self.map(SyncedClientResponse.read)
+        # SyncedClientResponse.read just returns an internal variable
+        # => there is no way this could raise an exception under normal circumstances
+        # => if it does, it is an implementation error and we should just raise it normally
+        return self.map(SyncedClientResponse.read, on_error="raise")
 
 
 def bulk_get(
