@@ -5,11 +5,11 @@ import json
 import traceback
 from abc import abstractmethod
 from bisect import insort_right
-from collections.abc import AsyncGenerator, Callable, Generator, Iterable
+from collections.abc import AsyncGenerator, Callable, Iterable
 from http.cookies import SimpleCookie
 from itertools import product, repeat
 from pathlib import Path
-from typing import Any, Generic, Literal, Self, TypeAlias, TypeVar
+from typing import Any, Generic, Literal, TypeAlias, TypeVar, overload
 
 import aiohttp
 import yarl
@@ -142,23 +142,38 @@ class ApicadabriResponse(Generic[R]):
     def __init__(self):
         pass
 
-    def map(self, func: Callable[[R], S]) -> "ApicadabriResponse[S]":
-        """Apply a function to the response."""
-        return ApicadabriMapResponse(self, func)
-
-    def map_safe(
-        self,
-        map_func: Callable[[R], S],
-        error_func: Callable[[R, BaseException], S],
-    ) -> "ApicadabriResponse[S]":
-        return ApicadabriSafeMapResponse(self, map_func, error_func)
-
-    def map_maybe(
+    @overload
+    def map(
         self,
         func: Callable[[R], S],
-    ) -> "ApicadabriResponse[S | ApicadabriErrorResponse[R]]":
+        on_error: Literal["raise"] = "raise",
+    ) -> "ApicadabriResponse[S]": ...
+
+    @overload
+    def map(
+        self,
+        func: Callable[[R], S],
+        on_error: Literal["return"],
+    ) -> "ApicadabriResponse[S | ApicadabriErrorResponse[R]]": ...
+
+    @overload
+    def map(
+        self,
+        func: Callable[[R], S],
+        on_error: Callable[[R, BaseException], S],
+    ) -> "ApicadabriResponse[S]": ...
+
+    def map(
+        self,
+        func: Callable[[R], S],
+        on_error: Literal["raise", "return"] | Callable[[R, BaseException], S] = "raise",
+    ) -> "ApicadabriResponse[S] | ApicadabriResponse[S | ApicadabriErrorResponse[R]]":
         """Apply a function to the response."""
-        return ApicadabriMaybeMapResponse(self, func)
+        if on_error == "raise":
+            return ApicadabriMapResponse(self, func)
+        if on_error == "return":
+            return ApicadabriMaybeMapResponse(self, func)
+        return ApicadabriSafeMapResponse(self, func, on_error)
 
     @abstractmethod
     def call_all(self) -> AsyncGenerator[R, None]:
@@ -418,9 +433,11 @@ class ApicadabriBulkCallResponse(ApicadabriResponse[SyncedClientResponse]):
                     current_index = buffer[-1][0] if len(buffer) > 0 else -1
                     next_index += 1
 
+    # TODO: add on_error parameter
     def json(self) -> ApicadabriResponse[Any]:
         return self.map(SyncedClientResponse.json)
 
+    # TODO: add on_error parameter
     def text(self) -> ApicadabriResponse[str]:
         return self.map(SyncedClientResponse.text)
 

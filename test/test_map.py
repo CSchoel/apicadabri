@@ -106,7 +106,7 @@ def test_safe_map_error(mocker):
             urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
         )
         .json()
-        .map_safe(lambda res: res["name"], lambda _, e: str(e))
+        .map(lambda res: res["name"], on_error=lambda _, e: str(e))
         .to_list()
     )
     assert data == ["bulbasaur", "'name'", "charmander"]
@@ -129,7 +129,7 @@ def test_map_maybe_error(mocker):
             urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
         )
         .json()
-        .map_maybe(lambda res: res["name"])
+        .map(lambda res: res["name"], on_error="return")
         .to_list()
     )
     assert data[0] == "bulbasaur"
