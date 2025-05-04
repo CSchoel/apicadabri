@@ -51,3 +51,19 @@ TODO
 ### Multivariate (pipeline)
 
 TODO
+
+## Error Handling
+
+API calls can always fail and you don't want your script with 100k API calls to crash on call number 10k because you forgot to handle a `None` somewhere.
+At the same time, though, you might not even care about errors and just want to set up a test scenario quick and dirty.
+Apicadabri adapts to both scenarios, by providing you three options for error handling, managed by the `on_error` parameter:
+
+* `raise`: The exception is not caught at all, instead it is just raised as normal and the bulk call will fail.
+* `return`: The exception is caught and encapsulated in an `ApicadabriErrorResponse` object, that also contains the input that triggered the exception.
+* A lambda function: The exception is caught and the provided error handling function is called with the triggering input and the error message and type.
+    The error handling function must return a result of the same type as would be expected by a successful call.
+    This can, for example, be used to return an "empty" result that does not lead to exceptions in further processing.
+
+    ℹ️ If you need to return a _different_ type of object in case of an error, you can instead use `map` with `on_error="return"` and then do another `map` that transforms the error response into the type you want.
+
+The `on_error` parameter is available for multiple central methods of return objects, most notably `map` and `reduce`.
