@@ -4,7 +4,7 @@
 
 # Apicadabri
 
-Apicadabri is a magical set of tools to interact with APIs from a data scientist's perspective to "just get the damn data"™.
+Apicadabri is a magical set of tools to interact with web APIs from a data scientist's perspective to "just get the damn data"™.
 
 It focuses on simplicity and speed while being agnostic about what kind of API you're calling.
 If you know how to send a single call to the API you're interested in, you should be good to go to scale up to 100k calls with apicadabri.

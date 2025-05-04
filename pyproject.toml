@@ -1,7 +1,7 @@
 [project]
 name = "apicadabri"
 version = "0.1.0"
-description = "Magical tools to interact with APIs from a data scientist's perspective."
+description = "Magical tools to interact with web APIs from a data scientist's perspective."
 readme = "README.md"
 authors = [
     { name = "Christopher Schölzel", email = "christopher.schoelzel@mailbox.org" },
