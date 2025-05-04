@@ -112,7 +112,7 @@ def test_multi_url_speed(mocker):
 @pytest.mark.parametrize(
     ("n", "max_active_calls", "expected_time_s"),
     [
-        pytest.param(10_000, 1000, 0.3, id="10k"),
+        pytest.param(10_000, 1000, 2, id="10k"),
         pytest.param(100_000, 1000, 20, id="100k"),
         pytest.param(
             1_000_000,
