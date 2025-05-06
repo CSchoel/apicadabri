@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ApicadabriBulkResponse` base class that can be used to run Apicadabri for arbitrary async tasks that don't have to involve `aiohttp`.
+
 ## [0.1.0] - 2025-05-04
 
 ### Added
