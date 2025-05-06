@@ -13,6 +13,19 @@ If you know how to send a single call to the API you're interested in, you shoul
 
 This is still an early alpha. Some basic examples already work, though (see below).
 
+## Features
+
+* 🚀 Get the maximum amount of speed while still playing nice with the API provider.
+  * ⚙️ Configurable number of calls active at the same time (using a Semaphore).
+  * 🔀 Async execution, so everything stays within one Python process.
+* 🐤 You don't have to write `async` or care about task scheduling anywhere.
+* 🪜 Process results right as they come in.
+* 🐛 Comprehensive error handling and retry mechanisms.*
+* 📊 Directly get a dataframe from just a single chain of method calls.*
+* 🔧 More than just HTTP: Use the abovementioned features for arbitrary (async) tasks.
+
+*: Not yet fully implemented.
+
 ## Assumptions
 
 For now, apicadabri assumes that you want to solve a task for which the following holds:
