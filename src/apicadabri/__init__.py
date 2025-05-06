@@ -5,11 +5,11 @@ import json
 import traceback
 from abc import ABC, abstractmethod
 from bisect import insort_right
-from collections.abc import AsyncGenerator, Callable, Iterable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine, Iterable
 from http.cookies import SimpleCookie
 from itertools import product, repeat
 from pathlib import Path
-from typing import Any, Generic, Literal, TypeAlias, TypeVar, overload
+from typing import Any, Generic, Literal, ParamSpec, TypeAlias, TypeVar, overload
 
 import aiohttp
 import yarl
@@ -373,10 +373,63 @@ class SyncedClientResponse:
         return self.body
 
 
+P = ParamSpec("P")
+
+
+class ApicadabriRetryError(Exception):
+    pass
+
+
+class ApicadabriMaxRetryError(Exception):
+    pass
+
+
+class AsyncRetrier(Generic[P, R]):
+    def __init__(
+        self,
+        max_retries: int = 10,
+        initial_sleep_s: float = 0.01,
+        sleep_multiplier: float = 2,
+        max_sleep_s: float = 60 * 15,
+        should_retry: Callable[[Exception], bool] | None = None,
+    ):
+        self.max_retries = max_retries
+        self.initial_sleep_s = initial_sleep_s
+        self.sleep_multiplier = sleep_multiplier
+        self.max_sleep_s = max_sleep_s
+        self.should_retry = should_retry if should_retry is not None else lambda _: True
+
+    async def retries(self) -> AsyncGenerator[tuple[int, float], None]:
+        sleep_s = self.initial_sleep_s
+        for i in range(self.max_retries):
+            yield i, sleep_s
+            await asyncio.sleep(sleep_s)
+            sleep_s *= self.sleep_multiplier
+            sleep_s = min(self.max_sleep_s, sleep_s)
+
+    async def retry(self, callable_to_retry: Callable[[], Coroutine[None, None, R]]) -> R:
+        last_exception = None
+        async for i, sleep_time_s in self.retries():
+            try:
+                return await callable_to_retry()
+            except Exception as e:
+                last_exception = e
+                if not self.should_retry(e):
+                    raise ApicadabriRetryError(f"{i + 1}th retry failed.") from e
+        msg = f"Call failed after {self.max_retries} retries."
+        if last_exception is not None:
+            raise ApicadabriMaxRetryError(
+                msg,
+            ) from last_exception
+        msg = "Max retries reached, but no exception stored. This should never happen!"
+        raise RuntimeError(msg)
+
+
 class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
     def __init__(self, *args, max_active_calls: int = 20, **kwargs):
         super().__init__(*args, **kwargs)
         self.semaphore = asyncio.Semaphore(max_active_calls)
+        self.retrier = AsyncRetrier()
 
     async def call_all(self) -> AsyncGenerator[R, None]:
         next_index = 0
@@ -401,8 +454,11 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
         index: int,
         instance_args: A,
     ) -> tuple[int, R]:
+        async def call_api_for_retry():
+            return self.call_api(client, index, instance_args)
+
         async with self.semaphore:
-            return await self.call_api(client, index, instance_args)
+            self.retrier.retry(call_api_for_retry)
 
     @abstractmethod
     async def call_api(
@@ -434,7 +490,7 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
 
 
 class ApicadabriBulkHTTPResponse(
-    ApicadabriBulkResponse[ApicadabriCallInstance, SyncedClientResponse]
+    ApicadabriBulkResponse[ApicadabriCallInstance, SyncedClientResponse],
 ):
     def __init__(
         self,
