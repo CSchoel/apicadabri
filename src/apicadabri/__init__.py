@@ -102,7 +102,11 @@ class ApicadabriCallArguments(BaseModel):
             ApicadabriCallInstance(url=u, params=p, json=j, headers=h) for u, p, j, h in combined
         )
 
-    def any_iterable(self, single_val: A | None, multi_val: Iterable[A] | None) -> Iterable[A]:
+    def any_iterable(
+        self,
+        single_val: A | None,
+        multi_val: Iterable[A] | None,
+    ) -> Iterable[A]:
         if single_val is None:
             if multi_val is None:
                 msg = "Single and multi val cannot both be null."
@@ -183,7 +187,9 @@ class ApicadabriResponse(Generic[R]):
                 self.reduce(
                     lambda _, r: f.write(json.dumps(r) + "\n"),
                     start=0,
-                    on_error=lambda _, r, e: f.write(error_value.format(result=r, exception=e)),
+                    on_error=lambda _, r, e: f.write(
+                        error_value.format(result=r, exception=e),
+                    ),
                 ),
             )
 
@@ -259,7 +265,11 @@ class ApicadabriErrorResponse(BaseModel, Generic[R]):
         arbitrary_types_allowed = True
 
     @classmethod
-    def from_exception(cls, e: Exception, triggering_input: R) -> "ApicadabriErrorResponse[R]":
+    def from_exception(
+        cls,
+        e: Exception,
+        triggering_input: R,
+    ) -> "ApicadabriErrorResponse[R]":
         return ApicadabriErrorResponse(
             type=e.__class__.__name__,
             message=str(e),
@@ -268,7 +278,10 @@ class ApicadabriErrorResponse(BaseModel, Generic[R]):
         )
 
 
-class ApicadabriMaybeMapResponse(ApicadabriResponse[S | ApicadabriErrorResponse[R]], Generic[R, S]):
+class ApicadabriMaybeMapResponse(
+    ApicadabriResponse[S | ApicadabriErrorResponse[R]],
+    Generic[R, S],
+):
     def __init__(self, base: ApicadabriResponse[R], func: Callable[[R], S]):
         self.func = func
         self.base = base
@@ -285,7 +298,13 @@ class ApicadabriMaybeMapResponse(ApicadabriResponse[S | ApicadabriErrorResponse[
 
 
 class SyncedClientResponse:
-    def __init__(self, base: aiohttp.ClientResponse, body: bytes, *, is_exception: bool = False):
+    def __init__(
+        self,
+        base: aiohttp.ClientResponse,
+        body: bytes,
+        *,
+        is_exception: bool = False,
+    ):
         self.base = base
         self.body = body
         self.is_exception = is_exception
@@ -410,7 +429,10 @@ class AsyncRetrier(Generic[P, R]):
             sleep_s *= self.sleep_multiplier
             sleep_s = min(self.max_sleep_s, sleep_s)
 
-    async def retry(self, callable_to_retry: Callable[[], Coroutine[None, None, R]]) -> R:
+    async def retry(
+        self,
+        callable_to_retry: Callable[[], Coroutine[None, None, R]],
+    ) -> R:
         last_exception = None
         async for i, _ in self.retries():
             try:
