@@ -476,8 +476,8 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
         index: int,
         instance_args: A,
     ) -> tuple[int, R]:
-        async def call_api_for_retry() -> Coroutine[None, None, tuple[int, R]]:
-            return self.call_api(client, index, instance_args)
+        async def call_api_for_retry() -> tuple[int, R]:
+            return await self.call_api(client, index, instance_args)
 
         async with self.semaphore:
             return await self.retrier.retry(call_api_for_retry)
