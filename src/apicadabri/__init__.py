@@ -406,7 +406,7 @@ class ApicadabriMaxRetryError(Exception):
         super().__init__(f"Call failed after {max_retries} retries.")
 
 
-class AsyncRetrier(Generic[P, R]):
+class AsyncRetrier:
     def __init__(
         self,
         max_retries: int = 10,
@@ -448,10 +448,16 @@ class AsyncRetrier(Generic[P, R]):
 
 
 class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
-    def __init__(self, *args, max_active_calls: int = 20, **kwargs):
+    def __init__(
+        self,
+        *args,
+        max_active_calls: int = 20,
+        retrier: AsyncRetrier | None = None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.semaphore = asyncio.Semaphore(max_active_calls)
-        self.retrier = AsyncRetrier()
+        self.retrier = AsyncRetrier() if retrier is None else retrier
 
     async def call_all(self) -> AsyncGenerator[R, None]:
         next_index = 0
@@ -519,8 +525,9 @@ class ApicadabriBulkHTTPResponse(
         apicadabri_args: ApicadabriCallArguments,
         method: Literal["POST", "GET"],
         max_active_calls: int = 20,
+        retrier: AsyncRetrier | None = None,
     ):
-        super().__init__(max_active_calls=max_active_calls)
+        super().__init__(max_active_calls=max_active_calls, retrier=retrier)
         self.apicadabri_args = apicadabri_args
         self.method = method
 
@@ -615,6 +622,7 @@ def bulk_get(
     headers: dict[str, str] | None = None,
     header_sets: Iterable[dict[str, str]] | None = None,
     max_active_calls: int = 20,
+    retrier: AsyncRetrier | None = None,
     **kwargs: dict[str, Any],
 ) -> ApicadabriBulkHTTPResponse:
     if params is None and param_sets is None:
@@ -637,6 +645,7 @@ def bulk_get(
             mode="zip",
         ),
         max_active_calls=max_active_calls,
+        retrier=retrier,
         **kwargs,
     )
 
@@ -645,6 +654,7 @@ def bulk_call(
     method: Literal["POST", "GET"],
     apicadabri_args: ApicadabriCallArguments,
     max_active_calls: int = 20,
+    retrier: AsyncRetrier | None = None,
     # response_type: Literal["bytes", "str", "json", "raw"] = "json",
     **kwargs,
 ) -> ApicadabriBulkHTTPResponse:
@@ -653,4 +663,5 @@ def bulk_call(
         apicadabri_args=apicadabri_args,
         method=method,
         max_active_calls=max_active_calls,
+        retrier=retrier,
     )
