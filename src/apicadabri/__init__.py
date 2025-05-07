@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Generic, Literal, ParamSpec, TypeAlias, TypeVar, overload
 
 import aiohttp
+import humanize
 import yarl
 from aiohttp.client_reqrep import ContentDisposition
 from aiohttp.connector import Connection
@@ -377,11 +378,13 @@ P = ParamSpec("P")
 
 
 class ApicadabriRetryError(Exception):
-    pass
+    def __init__(self, i: int):
+        super().__init__(f"{humanize.ordinal(i + 1)} retry failed.")
 
 
 class ApicadabriMaxRetryError(Exception):
-    pass
+    def __init__(self, max_retries: int):
+        super().__init__(f"Call failed after {max_retries} retries.")
 
 
 class AsyncRetrier(Generic[P, R]):
@@ -409,18 +412,15 @@ class AsyncRetrier(Generic[P, R]):
 
     async def retry(self, callable_to_retry: Callable[[], Coroutine[None, None, R]]) -> R:
         last_exception = None
-        async for i, sleep_time_s in self.retries():
+        async for i, _ in self.retries():
             try:
                 return await callable_to_retry()
             except Exception as e:
                 last_exception = e
                 if not self.should_retry(e):
-                    raise ApicadabriRetryError(f"{i + 1}th retry failed.") from e
-        msg = f"Call failed after {self.max_retries} retries."
+                    raise ApicadabriRetryError(i) from e
         if last_exception is not None:
-            raise ApicadabriMaxRetryError(
-                msg,
-            ) from last_exception
+            raise ApicadabriMaxRetryError(self.max_retries) from last_exception
         msg = "Max retries reached, but no exception stored. This should never happen!"
         raise RuntimeError(msg)
 
@@ -454,11 +454,11 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
         index: int,
         instance_args: A,
     ) -> tuple[int, R]:
-        async def call_api_for_retry():
+        async def call_api_for_retry() -> Coroutine[None, None, tuple[int, R]]:
             return self.call_api(client, index, instance_args)
 
         async with self.semaphore:
-            self.retrier.retry(call_api_for_retry)
+            return await self.retrier.retry(call_api_for_retry)
 
     @abstractmethod
     async def call_api(
