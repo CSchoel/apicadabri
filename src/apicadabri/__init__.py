@@ -5,13 +5,14 @@ import json
 import traceback
 from abc import ABC, abstractmethod
 from bisect import insort_right
-from collections.abc import AsyncGenerator, Callable, Iterable
+from collections.abc import AsyncGenerator, Callable, Coroutine, Iterable
 from http.cookies import SimpleCookie
 from itertools import product, repeat
 from pathlib import Path
 from typing import Any, Generic, Literal, TypeAlias, TypeVar, overload
 
 import aiohttp
+import humanize
 import yarl
 from aiohttp.client_reqrep import ContentDisposition
 from aiohttp.connector import Connection
@@ -44,16 +45,16 @@ class ApicadabriCallInstance(BaseModel):
 
 
 class ApicadabriCallArguments(BaseModel):
-    url: str | None
-    urls: Iterable[str] | None
-    params: dict[str, str] | None
-    param_sets: Iterable[dict[str, str]] | None
+    url: str | None = None
+    urls: Iterable[str] | None = None
+    params: dict[str, str] | None = None
+    param_sets: Iterable[dict[str, str]] | None = None
     # NOTE we need to use an alias to avoid shadowing the BaseModel field
-    json_data: JSON | None = Field(alias="json")
-    json_sets: Iterable[JSON] | None
-    headers: dict[str, str] | None
-    header_sets: Iterable[dict[str, str]] | None
-    mode: Literal["zip", "product", "pipeline"]
+    json_data: JSON | None = Field(alias="json", default=None)
+    json_sets: Iterable[JSON] | None = None
+    headers: dict[str, str] | None = None
+    header_sets: Iterable[dict[str, str]] | None = None
+    mode: Literal["zip", "product", "pipeline"] = "zip"
 
     @model_validator(mode="after")
     def validate_not_both_none(self):
@@ -101,7 +102,11 @@ class ApicadabriCallArguments(BaseModel):
             ApicadabriCallInstance(url=u, params=p, json=j, headers=h) for u, p, j, h in combined
         )
 
-    def any_iterable(self, single_val: A | None, multi_val: Iterable[A] | None) -> Iterable[A]:
+    def any_iterable(
+        self,
+        single_val: A | None,
+        multi_val: Iterable[A] | None,
+    ) -> Iterable[A]:
         if single_val is None:
             if multi_val is None:
                 msg = "Single and multi val cannot both be null."
@@ -182,7 +187,9 @@ class ApicadabriResponse(Generic[R]):
                 self.reduce(
                     lambda _, r: f.write(json.dumps(r) + "\n"),
                     start=0,
-                    on_error=lambda _, r, e: f.write(error_value.format(result=r, exception=e)),
+                    on_error=lambda _, r, e: f.write(
+                        error_value.format(result=r, exception=e),
+                    ),
                 ),
             )
 
@@ -258,7 +265,11 @@ class ApicadabriErrorResponse(BaseModel, Generic[R]):
         arbitrary_types_allowed = True
 
     @classmethod
-    def from_exception(cls, e: Exception, triggering_input: R) -> "ApicadabriErrorResponse[R]":
+    def from_exception(
+        cls,
+        e: Exception,
+        triggering_input: R,
+    ) -> "ApicadabriErrorResponse[R]":
         return ApicadabriErrorResponse(
             type=e.__class__.__name__,
             message=str(e),
@@ -267,7 +278,10 @@ class ApicadabriErrorResponse(BaseModel, Generic[R]):
         )
 
 
-class ApicadabriMaybeMapResponse(ApicadabriResponse[S | ApicadabriErrorResponse[R]], Generic[R, S]):
+class ApicadabriMaybeMapResponse(
+    ApicadabriResponse[S | ApicadabriErrorResponse[R]],
+    Generic[R, S],
+):
     def __init__(self, base: ApicadabriResponse[R], func: Callable[[R], S]):
         self.func = func
         self.base = base
@@ -284,7 +298,13 @@ class ApicadabriMaybeMapResponse(ApicadabriResponse[S | ApicadabriErrorResponse[
 
 
 class SyncedClientResponse:
-    def __init__(self, base: aiohttp.ClientResponse, body: bytes, *, is_exception: bool = False):
+    def __init__(
+        self,
+        base: aiohttp.ClientResponse,
+        body: bytes,
+        *,
+        is_exception: bool = False,
+    ):
         self.base = base
         self.body = body
         self.is_exception = is_exception
@@ -373,10 +393,68 @@ class SyncedClientResponse:
         return self.body
 
 
+class ApicadabriRetryError(Exception):
+    def __init__(self, i: int):
+        super().__init__(f"{humanize.ordinal(i + 1)} retry failed.")
+
+
+class ApicadabriMaxRetryError(Exception):
+    def __init__(self, max_retries: int):
+        super().__init__(f"Call failed after {max_retries} retries.")
+
+
+class AsyncRetrier:
+    def __init__(
+        self,
+        max_retries: int = 10,
+        initial_sleep_s: float = 0.01,
+        sleep_multiplier: float = 2,
+        max_sleep_s: float = 60 * 15,
+        should_retry: Callable[[Exception], bool] | None = None,
+    ):
+        self.max_retries = max_retries
+        self.initial_sleep_s = initial_sleep_s
+        self.sleep_multiplier = sleep_multiplier
+        self.max_sleep_s = max_sleep_s
+        self.should_retry = should_retry if should_retry is not None else lambda _: True
+
+    async def retries(self) -> AsyncGenerator[tuple[int, float], None]:
+        sleep_s = self.initial_sleep_s
+        for i in range(self.max_retries):
+            yield i, sleep_s
+            await asyncio.sleep(sleep_s)
+            sleep_s *= self.sleep_multiplier
+            sleep_s = min(self.max_sleep_s, sleep_s)
+
+    async def retry(
+        self,
+        callable_to_retry: Callable[[], Coroutine[None, None, R]],
+    ) -> R:
+        last_exception = None
+        async for i, _ in self.retries():
+            try:
+                return await callable_to_retry()
+            except Exception as e:
+                last_exception = e
+                if not self.should_retry(e):
+                    raise ApicadabriRetryError(i) from e
+        if last_exception is not None:
+            raise ApicadabriMaxRetryError(self.max_retries) from last_exception
+        msg = "Max retries reached, but no exception stored. This should never happen!"
+        raise RuntimeError(msg)
+
+
 class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
-    def __init__(self, *args, max_active_calls: int = 20, **kwargs):
+    def __init__(
+        self,
+        *args,
+        max_active_calls: int = 20,
+        retrier: AsyncRetrier | None = None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.semaphore = asyncio.Semaphore(max_active_calls)
+        self.retrier = AsyncRetrier() if retrier is None else retrier
 
     async def call_all(self) -> AsyncGenerator[R, None]:
         next_index = 0
@@ -401,8 +479,11 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
         index: int,
         instance_args: A,
     ) -> tuple[int, R]:
-        async with self.semaphore:
+        async def call_api_for_retry() -> tuple[int, R]:
             return await self.call_api(client, index, instance_args)
+
+        async with self.semaphore:
+            return await self.retrier.retry(call_api_for_retry)
 
     @abstractmethod
     async def call_api(
@@ -434,15 +515,16 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
 
 
 class ApicadabriBulkHTTPResponse(
-    ApicadabriBulkResponse[ApicadabriCallInstance, SyncedClientResponse]
+    ApicadabriBulkResponse[ApicadabriCallInstance, SyncedClientResponse],
 ):
     def __init__(
         self,
         apicadabri_args: ApicadabriCallArguments,
         method: Literal["POST", "GET"],
         max_active_calls: int = 20,
+        retrier: AsyncRetrier | None = None,
     ):
-        super().__init__(max_active_calls=max_active_calls)
+        super().__init__(max_active_calls=max_active_calls, retrier=retrier)
         self.apicadabri_args = apicadabri_args
         self.method = method
 
@@ -537,6 +619,7 @@ def bulk_get(
     headers: dict[str, str] | None = None,
     header_sets: Iterable[dict[str, str]] | None = None,
     max_active_calls: int = 20,
+    retrier: AsyncRetrier | None = None,
     **kwargs: dict[str, Any],
 ) -> ApicadabriBulkHTTPResponse:
     if params is None and param_sets is None:
@@ -559,6 +642,7 @@ def bulk_get(
             mode="zip",
         ),
         max_active_calls=max_active_calls,
+        retrier=retrier,
         **kwargs,
     )
 
@@ -567,6 +651,7 @@ def bulk_call(
     method: Literal["POST", "GET"],
     apicadabri_args: ApicadabriCallArguments,
     max_active_calls: int = 20,
+    retrier: AsyncRetrier | None = None,
     # response_type: Literal["bytes", "str", "json", "raw"] = "json",
     **kwargs,
 ) -> ApicadabriBulkHTTPResponse:
@@ -575,4 +660,5 @@ def bulk_call(
         apicadabri_args=apicadabri_args,
         method=method,
         max_active_calls=max_active_calls,
+        retrier=retrier,
     )
