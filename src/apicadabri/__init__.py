@@ -9,7 +9,7 @@ from collections.abc import AsyncGenerator, Callable, Coroutine, Iterable
 from http.cookies import SimpleCookie
 from itertools import product, repeat
 from pathlib import Path
-from typing import Any, Generic, Literal, ParamSpec, TypeAlias, TypeVar, overload
+from typing import Any, Generic, Literal, TypeAlias, TypeVar, overload
 
 import aiohttp
 import humanize
@@ -391,9 +391,6 @@ class SyncedClientResponse:
 
     def read(self) -> bytes:
         return self.body
-
-
-P = ParamSpec("P")
 
 
 class ApicadabriRetryError(Exception):
