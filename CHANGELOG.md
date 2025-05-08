@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `AsyncRetrier` class that allows to specify retry settings and retry any async callable.
+- `retrier` parameter for `bulk_call` and `bulk_get`.
+
 ## [0.2.0] - 2025-05-06
 
 ### Added
