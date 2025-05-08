@@ -29,6 +29,21 @@ A = TypeVar("A")
 
 
 def exception_to_json(e: Exception) -> dict[str, str]:
+    """Return a JSON representation of an arbirary exception.
+
+    Keys:
+        - "type": The Name of the exception class.
+        - "message": The message of the exception.
+        - "traceback": The full traceback as string.
+
+    Args:
+        e: The exception to capture.
+
+    Return:
+        A JSON-serializable dictionary, containing the exception type, message,
+        and trackeback.
+
+    """
     return {
         "type": e.__class__.__name__,
         "message": str(e),
@@ -37,6 +52,8 @@ def exception_to_json(e: Exception) -> dict[str, str]:
 
 
 class ApicadabriCallInstance(BaseModel):
+    """Arguments for a single instance of an HTTP API call."""
+
     url: str
     params: dict[str, str]
     # NOTE we need to use an alias to avoid shadowing the BaseModel field
@@ -45,6 +62,23 @@ class ApicadabriCallInstance(BaseModel):
 
 
 class ApicadabriCallArguments(BaseModel):
+    """A set of arguments to a web API that can be used as an iterator.
+
+    For each of the arguments, you can select whether you want to provide a
+    single value or an iterable of multiple values.
+
+    If only one of the arguments is given in list form, this object will
+    iterate over that list and provide `ApicadabriCallInstance` with the
+    respective values. For more than one argument in list form, the behavior
+    is defined by the `mode` parameter:
+
+    - "zip": Assume that all lists have the same length and combine them
+        with a call to `zip`, so that the first instance has the values from
+        the first element of each list and so on.
+    - "product": Iterate over all combinations of arguments. If you give 3 URLs
+        and 4 parameter sets, you will end up with 12 calls in total.
+    """
+
     url: str | None = None
     urls: Iterable[str] | None = None
     params: dict[str, str] | None = None
@@ -54,7 +88,7 @@ class ApicadabriCallArguments(BaseModel):
     json_sets: Iterable[JSON] | None = None
     headers: dict[str, str] | None = None
     header_sets: Iterable[dict[str, str]] | None = None
-    mode: Literal["zip", "product", "pipeline"] = "zip"
+    mode: Literal["zip", "product"] = "zip"
 
     @model_validator(mode="after")
     def validate_not_both_none(self):
@@ -114,11 +148,8 @@ class ApicadabriCallArguments(BaseModel):
             return multi_val
         if self.mode == "zip":
             return repeat(single_val)
-        if self.mode == "multiply":
+        if self.mode == "product":
             return [single_val]
-        if self.mode == "pipeline":
-            msg = "Pipeline mode isn't implemented yet."
-            raise NotImplementedError(msg)
         msg = f"Unrecognized mode {self.mode}"
         raise ValueError(msg)
 
