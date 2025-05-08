@@ -5,7 +5,7 @@ import json
 import traceback
 from abc import ABC, abstractmethod
 from bisect import insort_right
-from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine, Iterable
+from collections.abc import AsyncGenerator, Callable, Coroutine, Iterable
 from http.cookies import SimpleCookie
 from itertools import product, repeat
 from pathlib import Path
@@ -45,16 +45,16 @@ class ApicadabriCallInstance(BaseModel):
 
 
 class ApicadabriCallArguments(BaseModel):
-    url: str | None
-    urls: Iterable[str] | None
-    params: dict[str, str] | None
-    param_sets: Iterable[dict[str, str]] | None
+    url: str | None = None
+    urls: Iterable[str] | None = None
+    params: dict[str, str] | None = None
+    param_sets: Iterable[dict[str, str]] | None = None
     # NOTE we need to use an alias to avoid shadowing the BaseModel field
-    json_data: JSON | None = Field(alias="json")
-    json_sets: Iterable[JSON] | None
-    headers: dict[str, str] | None
-    header_sets: Iterable[dict[str, str]] | None
-    mode: Literal["zip", "product", "pipeline"]
+    json_data: JSON | None = Field(alias="json", default=None)
+    json_sets: Iterable[JSON] | None = None
+    headers: dict[str, str] | None = None
+    header_sets: Iterable[dict[str, str]] | None = None
+    mode: Literal["zip", "product", "pipeline"] = "zip"
 
     @model_validator(mode="after")
     def validate_not_both_none(self):
