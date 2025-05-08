@@ -5,11 +5,11 @@ import json
 import traceback
 from abc import ABC, abstractmethod
 from bisect import insort_right
-from collections.abc import AsyncGenerator, Callable, Coroutine, Iterable
+from collections.abc import AsyncGenerator, Callable, Coroutine, Generator, Iterable
 from http.cookies import SimpleCookie
 from itertools import product, repeat
 from pathlib import Path
-from typing import Any, Generic, Literal, TypeAlias, TypeVar, overload
+from typing import Any, Generic, Literal, Self, TypeAlias, TypeVar, overload
 
 import aiohttp
 import humanize
@@ -91,7 +91,12 @@ class ApicadabriCallArguments(BaseModel):
     mode: Literal["zip", "product"] = "zip"
 
     @model_validator(mode="after")
-    def validate_not_both_none(self):
+    def validate_not_both_none(self) -> Self:
+        """Ensure that either the single or the multi version of a parameter is not None.
+
+        For `params`, `json`, and `headers` the single version is set to an empty dict
+        if both are none. For `url`, a validation error is raised.
+        """
         if self.url is None and self.urls is None:
             msg = "One of `url` or `urls` must be provided."
             raise ValidationError(msg)
@@ -104,7 +109,8 @@ class ApicadabriCallArguments(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_only_one_provided(self):
+    def validate_only_one_provided(self) -> Self:
+        """Validate that either the single or the multi version of a parameter remains None."""
         if self.url is not None and self.urls is not None:
             msg = "You cannot specify both `url` and `urls`."
             raise ValidationError(msg)
@@ -119,7 +125,22 @@ class ApicadabriCallArguments(BaseModel):
             raise ValidationError(msg)
         return self
 
-    def __iter__(self):
+    def __iter__(self) -> Generator["ApicadabriCallInstance", None, None]:
+        """Iterate over individual call argument instances.
+
+        If multiple parameters are given as a list, the behavior depends
+        on `self.mode`:
+
+        - "zip": Assume that all lists have the same length and combine them
+            with a call to `zip`, so that the first instance has the values from
+            the first element of each list and so on.
+        - "product": Iterate over all combinations of arguments. If you give 3 URLs
+            and 4 parameter sets, you will end up with 12 calls in total.
+
+        Yields:
+            The argument sets to call the API with.
+
+        """
         iterables = (
             self.url_iterable,
             self.params_iterable,
@@ -131,7 +152,8 @@ class ApicadabriCallArguments(BaseModel):
         elif self.mode == "product":
             combined = product(*iterables)
         else:
-            raise NotImplementedError(f"Mode {self.mode} not implemented.")
+            msg = f"Mode {self.mode} not implemented."
+            raise NotImplementedError(msg)
         return iter(
             ApicadabriCallInstance(url=u, params=p, json=j, headers=h) for u, p, j, h in combined
         )
@@ -141,6 +163,16 @@ class ApicadabriCallArguments(BaseModel):
         single_val: A | None,
         multi_val: Iterable[A] | None,
     ) -> Iterable[A]:
+        """Turn any set of single and multi argument into an iterable.
+
+        Args:
+            single_val: The single value version of the argument.
+            multi_val: The multi version of the argument.
+
+        Returns:
+            An iterable that iterates over all (possibly just one) argument values.
+
+        """
         if single_val is None:
             if multi_val is None:
                 msg = "Single and multi val cannot both be null."
@@ -154,19 +186,23 @@ class ApicadabriCallArguments(BaseModel):
         raise ValueError(msg)
 
     @property
-    def url_iterable(self):
+    def url_iterable(self) -> Iterable[str]:
+        """Iterable version of `url` parameter."""
         return self.any_iterable(self.url, self.urls)
 
     @property
-    def params_iterable(self):
+    def params_iterable(self) -> Iterable[dict[str, str]]:
+        """Iterable version of the `params` parameter."""
         return self.any_iterable(self.params, self.param_sets)
 
     @property
-    def json_iterable(self):
+    def json_iterable(self) -> Iterable[JSON]:
+        """Iterable version of the `json` parameter."""
         return self.any_iterable(self.json_data, self.json_sets)
 
     @property
-    def headers_iterable(self):
+    def headers_iterable(self) -> Iterable[dict[str, str]]:
+        """Iterable version of the `headers` parameter."""
         return self.any_iterable(self.headers, self.header_sets)
 
 
@@ -175,8 +211,15 @@ S = TypeVar("S")
 
 
 class ApicadabriResponse(Generic[R]):
-    def __init__(self):
-        pass
+    """Response object that is used for constructing lazy evaluation pipelines.
+
+    The pipeline will only actually be executed once you call one of the
+    methods using `self.reduce` to collect the results.
+
+    Args:
+        R: The return type that is obtained when evaluating this response.
+
+    """
 
     @overload
     def map(
@@ -197,7 +240,18 @@ class ApicadabriResponse(Generic[R]):
         func: Callable[[R], S],
         on_error: Literal["raise", "return"] | Callable[[R, Exception], S] = "raise",
     ) -> "ApicadabriResponse[S] | ApicadabriResponse[S | ApicadabriErrorResponse[R]]":
-        """Apply a function to the response."""
+        """Apply a function to the response.
+
+        Args:
+            func: The function to apply to the response value.
+            on_error: Whether to just raise errors ("raise"), return an object encapsulating the
+                      exception ("return") or use a function to supply a fallback result.
+
+        Returns:
+            A response object of the return type of the map function. If `on_error` is
+            "return", the response type can also be a special error object.
+
+        """
         if on_error == "raise":
             return ApicadabriMapResponse(self, func)
         if on_error == "return":
@@ -210,6 +264,18 @@ class ApicadabriResponse(Generic[R]):
         ...
 
     def to_jsonl(self, filename: Path | str, error_value: str | None = None) -> None:
+        """Write results directly to a JSONL file.
+
+        As each result is directly appended to the file, this method can be used
+        to process results that are too large to fit into memory and to ensure
+        that results persist on disk even if the process crashes at some point.
+
+        Args:
+            filename: Name of the file to write to.
+            error_value: Value to write in case a response object cannot be
+                         converted to JSON.
+
+        """
         if error_value is None:
             error_value = "{{}}\n"
         filename_path = Path(filename)
@@ -225,20 +291,36 @@ class ApicadabriResponse(Generic[R]):
             )
 
     def to_list(self) -> list[R]:
+        """Return a list of all responses."""
         start: list[R] = []
 
-        def appender(lst: list[R], element: R):
+        def appender(lst: list[R], element: R) -> list[R]:
+            """Accumulator function that appends elements to a list.
+
+            Essentially, this is a faster version of `lst + [element]`.
+            """
             lst.append(element)
             return lst
 
         return asyncio.run(self.reduce(appender, start=start))
 
+    # TODO should this be async, or should we already use asyncio.run here?
     async def reduce(
         self,
         accumulator: Callable[[A, R], A],
         start: A,
         on_error: Literal["raise"] | Callable[[A, R, Exception], A] = "raise",
     ) -> A:
+        """Reduce the pipeline to a single object that collects all results.
+
+        Args:
+            accumulator: Accumulator function that takes an intermediary result
+                         and adds one response from the pipeline to it.
+            start: Initial result object to start with (e.g. empty list).
+            on_error: Whether to just raise errors ("raise") or use a function
+                      to supply a fallback result.
+
+        """
         accumulated = start
         async for res in self.call_all():
             try:
