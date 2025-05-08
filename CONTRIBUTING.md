@@ -11,8 +11,9 @@ This document currently mainly contains small code snippets to remind myself how
 1. Create a feature branch.
 2. Open a PR.
 3. Update the `CHANGELOG.md`.
-   - Don't forget to also update the links at the bottom.
-4. Update the version number in `pyproject.toml`
+4. Update the version number.
+   - Manually in `pyproject.toml`.
+   - With `keepachangelog release X.Y.Z` for the changelog.
 5. Merge the PR.
 6. `git checkout main`
 7. `git pull`
