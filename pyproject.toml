@@ -1,6 +1,6 @@
 [project]
 name = "apicadabri"
-version = "0.2.0"
+version = "0.3.0"
 description = "Magical tools to interact with web APIs from a data scientist's perspective."
 readme = "README.md"
 authors = [
