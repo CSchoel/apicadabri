@@ -80,7 +80,7 @@ indent-style = "space"
 
 [tool.ruff.lint]
 ignore = [
-    "TD002", # adding an author to TODOs wastes space and is redundant because of git histor
+    "TD002", # adding an author to TODOs wastes space and is redundant because of git history
     "TD003", # once there is an issue, there is no need to keep the TODO => don't require links
 ]
 
