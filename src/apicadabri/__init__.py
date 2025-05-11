@@ -210,6 +210,26 @@ R = TypeVar("R")
 S = TypeVar("S")
 
 
+class ApicadabriReduceError(Exception, Generic[A, R]):
+    """Exception that is raised when a reduce operation fails.
+
+    Args:
+        A: The type of the accumulated result.
+        R: The type of the result that caused the error.
+
+    """
+
+    def __init__(self, accumulated: A, res: R) -> None:
+        """Initialize the exception with the given message.
+
+        Args:
+            accumulated: The accumulated result before the error occurred.
+            res: The result that caused the error.
+
+        """
+        super().__init__(f"Adding {res} to {accumulated} failed.")
+
+
 class ApicadabriResponse(Generic[R]):
     """Response object that is used for constructing lazy evaluation pipelines.
 
@@ -304,7 +324,7 @@ class ApicadabriResponse(Generic[R]):
 
         return asyncio.run(self.reduce(appender, start=start))
 
-    # TODO should this be async, or should we already use asyncio.run here?
+    # TODO: should this be async, or should we already use asyncio.run here?
     async def reduce(
         self,
         accumulator: Callable[[A, R], A],
@@ -320,6 +340,12 @@ class ApicadabriResponse(Generic[R]):
             on_error: Whether to just raise errors ("raise") or use a function
                       to supply a fallback result.
 
+        Returns:
+            The final result object after all responses have been processed.
+
+        Raises:
+            ApicadabriReduceError: If the accumulator function raises an exception.
+
         """
         accumulated = start
         async for res in self.call_all():
@@ -327,7 +353,7 @@ class ApicadabriResponse(Generic[R]):
                 accumulated = accumulator(accumulated, res)
             except Exception as e:
                 if on_error == "raise":
-                    raise e
+                    raise ApicadabriReduceError(accumulated, res) from e
                 accumulated = on_error(accumulated, res, e)
         return accumulated
 
@@ -544,7 +570,7 @@ class SyncedClientResponse:
 
     @property
     def version(self) -> aiohttp.HttpVersion | None:
-        """Response’s version, HttpVersion instance."""
+        """Response’s version, HttpVersion instance."""  # noqa: RUF002
         # NOTE: docstring copied from aiohttp
         return self.base.version
 
@@ -571,7 +597,7 @@ class SyncedClientResponse:
 
     @property
     def method(self) -> str:
-        """Request’s method."""
+        """Request’s method."""  # noqa: RUF002
         # NOTE: docstring copied from aiohttp
         return self.base.method
 
@@ -643,7 +669,7 @@ class SyncedClientResponse:
 
         Returns str like 'utf-8' or None if no Content-Type header present in
         HTTP headers or it has no charset information.
-        """  # noqua: RUF002
+        """  # noqa: RUF002
         # NOTE: docstring copied from aiohttp
         return self.base.charset
 
@@ -719,7 +745,7 @@ class SyncedClientResponse:
         return json.loads(self.text())
 
     def read(self) -> bytes:
-        """Read the whole response’s body as bytes."""
+        """Read the whole response’s body as bytes."""  # noqa: RUF002
         # NOTE: docstring copied from aiohttp
         return self.body
 
@@ -940,6 +966,7 @@ class ApicadabriBulkHTTPResponse(
         method: Literal["POST", "GET"],
         max_active_calls: int = 20,
         retrier: AsyncRetrier | None = None,
+        **kwargs: dict[str, Any],
     ) -> None:
         """Initialize the response object.
 
@@ -949,11 +976,13 @@ class ApicadabriBulkHTTPResponse(
             max_active_calls: The maximum number of concurrent API calls to make.
             retrier: An instance of the AsyncRetrier class to use for retrying failed calls.
                      If None, a new instance will be created with default parameters.
+            kwargs: Additional keyword arguments to pass to the aiohttp get/post method.
 
         """
         super().__init__(max_active_calls=max_active_calls, retrier=retrier)
         self.apicadabri_args = apicadabri_args
         self.method = method
+        self.aiohttp_kwargs = kwargs
 
     async def call_api(
         self,
@@ -970,7 +999,11 @@ class ApicadabriBulkHTTPResponse(
 
         """
         aiohttp_method = session.post if self.method == "POST" else session.get
-        async with aiohttp_method(**args.model_dump(by_alias=True)) as resp, resp:
+        method_args = {**args.model_dump(by_alias=True), **self.aiohttp_kwargs}
+        async with (
+            aiohttp_method(**method_args) as resp,
+            resp,
+        ):
             try:
                 return (index, SyncedClientResponse(resp, await resp.read()))
             except Exception as e:  # noqa: BLE001
@@ -1066,7 +1099,7 @@ class ApicadabriBulkHTTPResponse(
         return self.map(SyncedClientResponse.read, on_error="raise")
 
 
-def bulk_get(
+def bulk_get(  # noqa: PLR0913
     url: str | None = None,
     urls: Iterable[str] | None = None,
     params: dict[str, str] | None = None,
@@ -1110,6 +1143,7 @@ def bulk_get(
         max_active_calls: The maximum number of concurrent API calls to make.
         retrier: An instance of the AsyncRetrier class to use for retrying failed calls.
                  If None, a new instance will be created with default parameters.
+        kwargs: Additional keyword arguments to pass to the aiohttp get method.
 
     Returns:
         A response object that can be used for further processing and retrieving the
@@ -1133,7 +1167,7 @@ def bulk_get(
             json_sets=json_sets,
             headers=headers,
             header_sets=header_sets,
-            mode="zip",
+            mode=mode,
         ),
         max_active_calls=max_active_calls,
         retrier=retrier,
@@ -1165,10 +1199,11 @@ def bulk_call(
         API responses.
 
     """
-    # TODO allow to pass extra args to aiohttp.ClientSession.get/post
+    # TODO: allow to pass extra args to aiohttp.ClientSession.get/post
     return ApicadabriBulkHTTPResponse(
         apicadabri_args=apicadabri_args,
         method=method,
         max_active_calls=max_active_calls,
         retrier=retrier,
+        **kwargs,
     )
