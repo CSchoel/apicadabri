@@ -1175,6 +1175,83 @@ def bulk_get(  # noqa: PLR0913
     )
 
 
+def bulk_post(  # noqa: PLR0913
+    url: str | None = None,
+    urls: Iterable[str] | None = None,
+    params: dict[str, str] | None = None,
+    param_sets: Iterable[dict[str, str]] | None = None,
+    json: JSON | None = None,
+    json_sets: Iterable[JSON] | None = None,
+    headers: dict[str, str] | None = None,
+    header_sets: Iterable[dict[str, str]] | None = None,
+    mode: Literal["zip", "product"] = "zip",
+    max_active_calls: int = 20,
+    retrier: AsyncRetrier | None = None,
+    **kwargs: dict[str, Any],
+) -> ApicadabriBulkHTTPResponse:
+    """Make a bulk POST request to the given API endpoint.
+
+    For each of the typical HTTP call parameters, you can either pass a single value or an
+    iterable of values.
+
+    If more than one parameter is passed as an iterable, the `mode` parameter determines how the
+    parameters are combined:
+
+    - "zip": The parameters are combined in a way that each parameter is combined with the
+        corresponding parameter from the other iterables. This means that the first element of each
+        iterable is combined, then the second element, and so on. If one iterable is shorter than
+        the others, it will be padded with None values.
+    - "product": The parameters are combined in a way that each parameter is combined with all
+        other parameters. This means that the first element of each iterable is combined with all
+        other elements, then the second element, and so on. This will result in a Cartesian product
+        of the parameters.
+
+    Args:
+        url: The URL of the API endpoint.
+        urls: An iterable of URLs to make requests to.
+        params: A dictionary of parameters to include in the request.
+        param_sets: An iterable of dictionaries of parameters to include in the request.
+        json: The JSON data to include in the request body.
+        json_sets: An iterable of JSON data to include in the request body.
+        headers: A dictionary of headers to include in the request.
+        header_sets: An iterable of dictionaries of headers to include in the request.
+        mode: The mode to use for combining the parameters. Either "zip" or "product".
+        max_active_calls: The maximum number of concurrent API calls to
+            make.
+        retrier: An instance of the AsyncRetrier class to use for retrying failed calls.
+                 If None, a new instance will be created with default parameters.
+        kwargs: Additional keyword arguments to pass to the aiohttp post method.
+
+    Returns:
+        A response object that can be used for further processing and retrieving the
+        API responses.
+
+    """
+    if params is None and param_sets is None:
+        params = {}
+    if json is None and json_sets is None:
+        json = {}
+    if headers is None and header_sets is None:
+        headers = {}
+    return bulk_call(
+        method="POST",
+        apicadabri_args=ApicadabriCallArguments(
+            url=url,
+            urls=urls,
+            params=params,
+            param_sets=param_sets,
+            json=json,
+            json_sets=json_sets,
+            headers=headers,
+            header_sets=header_sets,
+            mode=mode,
+        ),
+        max_active_calls=max_active_calls,
+        retrier=retrier,
+        **kwargs,
+    )
+
+
 def bulk_call(
     method: Literal["POST", "GET"],
     apicadabri_args: ApicadabriCallArguments,
@@ -1199,7 +1276,6 @@ def bulk_call(
         API responses.
 
     """
-    # TODO: allow to pass extra args to aiohttp.ClientSession.get/post
     return ApicadabriBulkHTTPResponse(
         apicadabri_args=apicadabri_args,
         method=method,
