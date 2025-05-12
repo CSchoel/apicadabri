@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Docstrings for all functions and classes.
+- `bulk_post` function.
+- Allows to forward kwargs to aiohttp functions.
+
+### Changed
+
+- `reduce` now raises its own `ApicadabriReduceError`.
+
+### Fixed
+
+- One reference to the `product` mode was called `multiply`.
+- Uses `ConfigDict` instead of deprecated `class Config`.
+
+### Removed
+
+- Old `pipeline` mode that wasn't implemented anyway.
+
 ## [0.3.0] - 2025-05-08
 
 ### Added
