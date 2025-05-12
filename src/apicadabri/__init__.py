@@ -510,6 +510,7 @@ class ApicadabriMaybeMapResponse(
             except Exception as e:  # noqa: BLE001
                 yield ApicadabriErrorResponse.from_exception(e, res)
 
+
 P = ParamSpec("P")
 C1 = TypeVar("C1")
 C2 = TypeVar("C2")
@@ -920,6 +921,7 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
         instance_args: A,
     ) -> tuple[int, R]:
         """Call the API with a semaphore (helper function)."""
+
         async def call_api_for_retry() -> tuple[int, R]:
             return await self.call_api(client, index, instance_args)
 
