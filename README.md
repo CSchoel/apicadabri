@@ -20,7 +20,7 @@ This is still an early alpha. Some basic examples already work, though (see belo
   * 🔀 Async execution, so everything stays within one Python process.
 * 🐤 You don't have to write `async` or care about task scheduling anywhere.
 * 🪜 Process results right as they come in.
-* 🐛 Comprehensive error handling and retry mechanisms.*
+* 🐛 Comprehensive error handling and retry mechanisms.
 * 📊 Directly get a dataframe from just a single chain of method calls.*
 * 🔧 More than just HTTP: Use the abovementioned features for arbitrary (async) tasks.
 
