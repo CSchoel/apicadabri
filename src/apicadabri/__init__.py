@@ -19,7 +19,13 @@ from aiohttp.client_reqrep import ContentDisposition
 from aiohttp.connector import Connection
 from aiohttp.typedefs import RawHeaders
 from multidict import CIMultiDictProxy, MultiDictProxy
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 from tqdm.asyncio import tqdm
 
 # source: https://stackoverflow.com/a/76646986
@@ -110,6 +116,16 @@ class ApicadabriCallArguments(BaseModel):
     mode: Literal["zip", "product"] = "zip"
     size: int | None = None
 
+    @field_validator("urls", "param_sets", "json_sets", "header_sets", mode="plain")
+    @classmethod
+    def validate_is_iterable(cls, value: Any) -> Any:
+        # NOTE: this is needed because the default validator wraps the iterable in a
+        # ValidatorIterator, which removes the information about the size for sequence types
+        if value is not None and not isinstance(value, Iterable):
+            msg = f"Object of type {type(value)} is not iterable!"
+            raise ValueError(msg)
+        return value
+
     @model_validator(mode="after")
     def validate_not_both_none(self) -> Self:
         """Ensure that either the single or the multi version of a parameter is not None.
@@ -119,7 +135,7 @@ class ApicadabriCallArguments(BaseModel):
         """
         if self.url is None and self.urls is None:
             msg = "One of `url` or `urls` must be provided."
-            raise ValidationError(msg)
+            raise ValueError(msg)
         if self.params is None and self.param_sets is None:
             self.params = {}
         if self.json_data is None and self.json_sets is None:
@@ -133,16 +149,16 @@ class ApicadabriCallArguments(BaseModel):
         """Validate that either the single or the multi version of a parameter remains None."""
         if self.url is not None and self.urls is not None:
             msg = "You cannot specify both `url` and `urls`."
-            raise ValidationError(msg)
+            raise ValueError(msg)
         if self.params is not None and self.param_sets is not None:
             msg = "You cannot specify both `param` and `param_sets`."
-            raise ValidationError(msg)
+            raise ValueError(msg)
         if self.json_data is not None and self.json_sets is not None:
             msg = "You cannot specify both `json` and `json_sets`."
-            raise ValidationError(msg)
+            raise ValueError(msg)
         if self.headers is not None and self.header_sets is not None:
             msg = "You cannot specify both `header` and `header_sets`."
-            raise ValidationError(msg)
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
@@ -150,13 +166,13 @@ class ApicadabriCallArguments(BaseModel):
         """If actual size is computable but size is given, validate that both match."""
         if isinstance(self.size, int):
             try:
-                actual_size = len(self)
+                actual_size = len(self)  # type: ignore
                 if self.size != actual_size:
                     msg = (
                         f"Explicitly given size {self.size} does not correspond to"
                         f" actual size {actual_size}."
                     )
-                    raise ValidationError(msg)
+                    raise ValueError(msg)
             except ApicadabriSizeUnknownError:
                 pass
         return self
@@ -241,25 +257,31 @@ class ApicadabriCallArguments(BaseModel):
         """Iterable version of the `headers` parameter."""
         return self.any_iterable(self.headers, self.header_sets)
 
-    # def __len__(self) -> int:
-    #     """Return the number of calls that will be made by this argument config."""
-    #     if self.size is not None:
-    #         return self.size
-    #     op = min if self.mode == "zip" else mul
-    #     size = 2**63 if self.mode == "zip" else 1
-    #     for name, iterable in [
-    #         ("urls", self.urls),
-    #         ("param_sets", self.param_sets),
-    #         ("json_sets", self.json_sets),
-    #         ("header_sets", self.header_sets),
-    #     ]:
-    #         if iterable is None:
-    #             continue
-    #         try:
-    #             size = op(size, len(iterable))
-    #         except Exception as e:
-    #             raise ApicadabriSizeUnknownError(name) from e
-    #     return size
+    def __len__(self) -> int:
+        """Return the number of calls that will be made by this argument config."""
+        if self.size is not None:
+            return self.size
+        op = min if self.mode == "zip" else mul
+        size = 2**63 if self.mode == "zip" else 1
+        for name, iterable in [
+            ("urls", self.urls),
+            ("param_sets", self.param_sets),
+            ("json_sets", self.json_sets),
+            ("header_sets", self.header_sets),
+        ]:
+            if iterable is None:
+                continue
+            try:
+                size = op(size, len(iterable))
+            except Exception as e:
+                raise ApicadabriSizeUnknownError(name) from e
+        return size
+
+    def estimate_size(self) -> int | None:
+        try:
+            return len(self)
+        except ApicadabriSizeUnknownError:
+            return None
 
 
 R = TypeVar("R")
@@ -388,7 +410,8 @@ class ApicadabriResponse(Generic[R]):
         return ApicadabriTqdmResponse(self, description)
 
     def __len__(self):
-        # TODO raise exception if length is unknown
+        if self.size is None:
+            raise ApicadabriSizeUnknownError("ApicadabriResponse")
         return self.size
 
     # TODO: should this be async, or should we already use asyncio.run here?
@@ -620,7 +643,7 @@ class ApicadabriTqdmResponse(ApicadabriResponse[R], Generic[R]):
     async def call_all(self) -> AsyncGenerator[R, None]:
         """Return an iterator that yields the results of the map calls."""
         async for res in tqdm(self.base.call_all(), desc=self.description, total=self.size):
-            yield await res
+            yield res
 
 
 class SyncedClientResponse:
@@ -1068,7 +1091,11 @@ class ApicadabriBulkHTTPResponse(
             kwargs: Additional keyword arguments to pass to the aiohttp get/post method.
 
         """
-        super().__init__(max_active_calls=max_active_calls, retrier=retrier)
+        super().__init__(
+            max_active_calls=max_active_calls,
+            retrier=retrier,
+            size=apicadabri_args.estimate_size(),
+        )
         self.apicadabri_args = apicadabri_args
         self.method = method
         self.aiohttp_kwargs = kwargs
