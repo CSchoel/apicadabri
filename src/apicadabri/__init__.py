@@ -1277,6 +1277,7 @@ def bulk_get(  # noqa: PLR0913
     mode: Literal["zip", "product"] = "zip",
     max_active_calls: int = 20,
     retrier: AsyncRetrier | None = None,
+    size: int | None = None,
     **kwargs: dict[str, Any],
 ) -> ApicadabriBulkHTTPResponse:
     """Make a bulk GET request to the given API endpoint.
@@ -1309,6 +1310,9 @@ def bulk_get(  # noqa: PLR0913
         max_active_calls: The maximum number of concurrent API calls to make.
         retrier: An instance of the AsyncRetrier class to use for retrying failed calls.
                  If None, a new instance will be created with default parameters.
+        size: The total number of individual API calls that will be made in this bulk call.
+              Only required if one of the call arguments is an iterator that doesn't support
+              getting the length with `len()`.
         kwargs: Additional keyword arguments to pass to the aiohttp get method.
 
     Returns:
@@ -1334,6 +1338,7 @@ def bulk_get(  # noqa: PLR0913
             headers=headers,
             header_sets=header_sets,
             mode=mode,
+            size=size,
         ),
         max_active_calls=max_active_calls,
         retrier=retrier,
@@ -1353,6 +1358,7 @@ def bulk_post(  # noqa: PLR0913
     mode: Literal["zip", "product"] = "zip",
     max_active_calls: int = 20,
     retrier: AsyncRetrier | None = None,
+    size: int | None = None,
     **kwargs: dict[str, Any],
 ) -> ApicadabriBulkHTTPResponse:
     """Make a bulk POST request to the given API endpoint.
@@ -1386,6 +1392,9 @@ def bulk_post(  # noqa: PLR0913
             make.
         retrier: An instance of the AsyncRetrier class to use for retrying failed calls.
                  If None, a new instance will be created with default parameters.
+        size: The total number of individual API calls that will be made in this bulk call.
+              Only required if one of the call arguments is an iterator that doesn't support
+              getting the length with `len()`.
         kwargs: Additional keyword arguments to pass to the aiohttp post method.
 
     Returns:
@@ -1411,6 +1420,7 @@ def bulk_post(  # noqa: PLR0913
             headers=headers,
             header_sets=header_sets,
             mode=mode,
+            size=size,
         ),
         max_active_calls=max_active_calls,
         retrier=retrier,
