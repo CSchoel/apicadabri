@@ -30,7 +30,7 @@ class MockResponse:
         """Get content as string."""
         return self._text
 
-    async def json(self) -> Any:
+    async def json(self) -> Any:  # noqa: ANN401
         """Get content as JSON."""
         return json.loads(self._text)
 

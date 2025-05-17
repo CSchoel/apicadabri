@@ -69,9 +69,6 @@ indent-width = 4
 # Assume Python 3.11
 target-version = "py311"
 
-# Select all rules by default
-select = ["ALL"]
-
 [tool.ruff.format]
 # Like Black, use double quotes for strings.
 quote-style = "double"
@@ -80,12 +77,17 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.ruff.lint]
+# Select all rules by default
+select = ["ALL"]
 ignore = [
     "TD002", # adding an author to TODOs wastes space and is redundant because of git history
     "TD003", # once there is an issue, there is no need to keep the TODO => don't require links
 ]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
 # source: https://github.com/astral-sh/ruff/issues/4368#issue-1705468153
 "test/**/*.py" = [
     # at least this three should be fine in tests:

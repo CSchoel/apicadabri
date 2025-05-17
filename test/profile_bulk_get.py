@@ -67,7 +67,7 @@ def profile_run() -> None:
     """Run a profiling test with mock results."""
     data = {"answer": 42}
     resp = MockResponse(json.dumps(data), 200, latency=0)
-    aiohttp.ClientSession.get = lambda *args, **kwargs: resp  # type: ignore
+    aiohttp.ClientSession.get = lambda *args, **kwargs: resp  # pyright: ignore [reportAttributeAccessIssue]
     _ = apicadabri.bulk_get(
         urls=(str(x) for x in range(100_000)),
         max_active_calls=1000,
