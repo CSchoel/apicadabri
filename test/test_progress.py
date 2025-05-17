@@ -227,3 +227,27 @@ class TestResponseSize:
             .to_list()
         )
         assert len(data) == len(pokemon)
+
+    def test_tee(self, mocker: MockerFixture) -> None:
+        """Test hypothesis: Calling `tee` yields expected indices and results."""
+        pokemon = ["bulbasaur", "squirtle", "charmander"]
+
+        tee_args = []
+        mocker.patch(
+            "aiohttp.ClientSession.get",
+            side_effect=lambda *args, **kwargs: MockResponse(),
+        )
+        data = (
+            bulk_get(
+                urls=[f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon],
+            )
+            .json()
+            .tee(lambda x, i, ln: tee_args.append((x, i, ln)))
+            .to_list()
+        )
+        assert tee_args == [
+            ({"result": "success"}, 1, 3),
+            ({"result": "success"}, 2, 3),
+            ({"result": "success"}, 3, 3),
+        ]
+        assert data == [{"result": "success"}] * 3

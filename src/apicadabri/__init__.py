@@ -438,6 +438,27 @@ class ApicadabriResponse(Generic[R]):
         """
         return ApicadabriTqdmResponse(self, tqdm_args)
 
+    def tee(
+        self,
+        inspect_func: Callable[[R, int, int | None], None],
+        *,
+        ignore_errors: bool = True,
+    ) -> "ApicadabriResponse[R]":
+        """Allows to inspect responses as they are processed and log progress.
+
+        The name stems from the UNIX command `tee`, which is like a T-shaped
+        element in plumbing, splitting the output into two streams.
+
+        Args:
+            inspect_func: Function to call for inspecting the results.
+                          The arguments passed are the current result, the
+                          (one-based) number of the current result, and the
+                          maximum number of results in this response if available.
+            ignore_errors: If True, silently ignores all exceptions raised by
+                           `inspect_func`.
+        """
+        return ApicadabriTeeResponse(self, inspect_func, ignore_errors=ignore_errors)
+
     def __len__(self) -> int:
         """Return number of results expected from this response.
 
@@ -485,6 +506,45 @@ class ApicadabriResponse(Generic[R]):
                     raise ApicadabriReduceError(accumulated, res) from e
                 accumulated = on_error(accumulated, res, e)
         return accumulated
+
+
+class ApicadabriTeeResponse(ApicadabriResponse[R], Generic[R]):
+    """Response object that allows to inspect results and progress with a supplied function."""
+
+    def __init__(
+        self,
+        base: ApicadabriResponse[R],
+        func: Callable[[R, int, int | None], Any],
+        *,
+        ignore_errors: bool = True,
+        **kwargs: dict[str, Any],
+    ) -> None:
+        """Initialize the response object.
+
+        Args:
+            base: The base response object to iterate over.
+            func: The inspection function to apply to the results of the pipeline.
+            ignore_errors: If true, exceptions from `func` are caught and silently ignored.
+            kwargs: Additional arguments passed to superclasses if multiple
+                    inheritance is used.
+
+        """
+        super().__init__(size=base.size, **kwargs)
+        self.func = func
+        self.base = base
+        self.ignore_errors = ignore_errors
+
+    async def call_all(self) -> AsyncGenerator[R, None]:
+        """Return an iterator that applies the inspection function and returns original results."""
+        i = 1
+        async for res in self.base.call_all():
+            try:
+                self.func(res, i, self.size)
+            except Exception:
+                if not self.ignore_errors:
+                    raise
+            yield res
+            i += 1
 
 
 class ApicadabriMapResponse(ApicadabriResponse[S], Generic[R, S]):
