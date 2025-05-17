@@ -975,7 +975,7 @@ class AsyncRetrier:
 
         """
         sleep_s = self.initial_sleep_s
-        for i in range(self.max_retries):
+        for i in range(self.max_retries + 1):
             yield i, sleep_s
             await asyncio.sleep(sleep_s)
             sleep_s *= self.sleep_multiplier
