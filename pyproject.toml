@@ -95,6 +95,7 @@ ignore = [
     # The below are debateable
     "PLR2004", # Magic value used in comparison, ...
     "S311",    # Standard pseudo-random generators are not suitable for cryptographic purposes
+    "INP001",  # Test folders should not have an `__init__.py`
 ]
 
 [dependency-groups]
