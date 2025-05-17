@@ -5,7 +5,7 @@ import json
 import traceback
 from abc import ABC, abstractmethod
 from bisect import insort_right
-from collections.abc import AsyncGenerator, Callable, Coroutine, Generator, Iterable, Sized
+from collections.abc import AsyncGenerator, Callable, Coroutine, Generator, Iterable
 from http.cookies import SimpleCookie
 from itertools import product, repeat
 from operator import mul
@@ -73,14 +73,14 @@ class ApicadabriSizeUnknownError(Exception):
     """Exception that indicates that the size of a pipeline could not be determined."""
 
     def __init__(self, name: str) -> None:
-        """Create a new exception instance for the given parameter name.
+        """Create a new exception instance for the given element name.
 
         Args:
-            name: The name of the parameter whose size could not be determined.
+            name: The name of the element whose size could not be determined.
 
         """
         super().__init__(
-            f"Size of parameter {name} unknown."
+            f"Size of {name} unknown."
             " Either provide the `size` argument explicitly or use an"
             " iterable that implements the `Sized` protocol.",
         )
@@ -118,9 +118,12 @@ class ApicadabriCallArguments(BaseModel):
 
     @field_validator("urls", "param_sets", "json_sets", "header_sets", mode="plain")
     @classmethod
-    def validate_is_iterable(cls, value: Any) -> Any:
-        # NOTE: this is needed because the default validator wraps the iterable in a
-        # ValidatorIterator, which removes the information about the size for sequence types
+    def validate_is_iterable(cls, value: Any) -> Any:  # noqa: ANN401
+        """Validate that the given value is an iterable.
+
+        This is only needed because the default validator wraps the iterable in a
+        ValidatorIterator, which removes the information about the size for sequence types.
+        """
         if value is not None and not isinstance(value, Iterable):
             msg = f"Object of type {type(value)} is not iterable!"
             raise ValueError(msg)
@@ -166,7 +169,7 @@ class ApicadabriCallArguments(BaseModel):
         """If actual size is computable but size is given, validate that both match."""
         if isinstance(self.size, int):
             try:
-                actual_size = len(self)  # type: ignore
+                actual_size = len(self)
                 if self.size != actual_size:
                     msg = (
                         f"Explicitly given size {self.size} does not correspond to"
@@ -278,6 +281,17 @@ class ApicadabriCallArguments(BaseModel):
         return size
 
     def estimate_size(self) -> int | None:
+        """Estimates the size of the call arguments.
+
+        If possible, this will calculate the actual number of calls that will
+        be made using these arguments. Otherwise it will either return a
+        fallback estimate given through the `size` parameter or `None` if no
+        estimate is possible at all.
+
+        Returns:
+            Number of calls made by these args or None if this can't be estimated.
+
+        """
         try:
             return len(self)
         except ApicadabriSizeUnknownError:
@@ -320,6 +334,15 @@ class ApicadabriResponse(Generic[R]):
     """
 
     def __init__(self, size: int | None, **kwargs: dict[str, Any]) -> None:
+        """Create a new response object.
+
+        Args:
+            size: The expected number of items returned by this response object.
+                  Can be None if unknown.
+            kwargs: Additional arguments passed to superclasses if multiple
+                    inheritance is used.
+
+        """
         super().__init__(**kwargs)
         self.size = size
 
@@ -406,12 +429,28 @@ class ApicadabriResponse(Generic[R]):
 
         return asyncio.run(self.reduce(appender, start=start))
 
-    def tqdm(self, description: str | None = None) -> "ApicadabriResponse[R]":
-        return ApicadabriTqdmResponse(self, description)
+    def tqdm(self, **tqdm_args: dict[str, Any]) -> "ApicadabriResponse[R]":
+        """Print a progress bar using tqdm when the pipeline execution reaches this step.
 
-    def __len__(self):
+        Args:
+            tqdm_args: Arguments passed on to `tqdm.asyncio.tqdm`.
+
+        """
+        return ApicadabriTqdmResponse(self, tqdm_args)
+
+    def __len__(self) -> int:
+        """Return number of results expected from this response.
+
+        Raises:
+            ApicadabriSizeUnknownError: If size is unknown.
+
+        Returns:
+            Number of results expected from this response.
+
+        """
         if self.size is None:
-            raise ApicadabriSizeUnknownError("ApicadabriResponse")
+            name = "ApicadabriResponse"
+            raise ApicadabriSizeUnknownError(name)
         return self.size
 
     # TODO: should this be async, or should we already use asyncio.run here?
@@ -471,6 +510,8 @@ class ApicadabriMapResponse(ApicadabriResponse[S], Generic[R, S]):
         Args:
             base: The base response object to map over.
             func: The mapping function to apply to the results of the pipeline.
+            kwargs: Additional arguments passed to superclasses if multiple
+                    inheritance is used.
 
         """
         super().__init__(size=base.size, **kwargs)
@@ -509,6 +550,8 @@ class ApicadabriSafeMapResponse(ApicadabriResponse[S], Generic[R, S]):
             base: The base response object to map over.
             map_func: The mapping function to apply to the results of the pipeline.
             error_func: The function to call in case of an error to get a fallback result.
+            kwargs: Additional arguments passed to superclasses if multiple
+                    inheritance is used.
 
         """
         super().__init__(size=base.size, **kwargs)
@@ -598,6 +641,8 @@ class ApicadabriMaybeMapResponse(
         Args:
             base: The base response object to map over.
             func: The mapping function to apply to the results of the pipeline.
+            kwargs: Additional arguments passed to superclasses if multiple
+                    inheritance is used.
 
         """
         super().__init__(size=base.size, **kwargs)
@@ -626,7 +671,7 @@ class ApicadabriTqdmResponse(ApicadabriResponse[R], Generic[R]):
     def __init__(
         self,
         base: ApicadabriResponse[R],
-        description: str | None = None,
+        tqdm_args: dict[str, Any],
         **kwargs: dict[str, Any],
     ) -> None:
         """Initialize the response object.
@@ -634,16 +679,21 @@ class ApicadabriTqdmResponse(ApicadabriResponse[R], Generic[R]):
         Args:
             base: The base response object to map over.
             size: The size of the response if it is known.
+            tqdm_args: Arguments passed on to `tqdm.asyncio.tqdm`.
+            kwargs: Additional arguments passed to superclasses if multiple
+                    inheritance is used.
 
         """
-        super().__init__(size=base.size, **kwargs)
+        super().__init__(size=tqdm_args.get("total", base.size), **kwargs)
         self.base = base
-        self.description = description
+        self.tqdm_args = {k: v for k, v in tqdm_args.items() if k != "total"}
 
     async def call_all(self) -> AsyncGenerator[R, None]:
         """Return an iterator that yields the results of the map calls."""
-        async for res in tqdm(self.base.call_all(), desc=self.description, total=self.size):
-            yield res
+        async for res in tqdm(self.base.call_all(), total=self.size, **self.tqdm_args):
+            # NOTE: tqdm.asyncio isn't typed. While we need async for for iteration here
+            #       the item returned is actually not an awaitable.
+            yield res  # type: ignore[return-value]
 
 
 class SyncedClientResponse:
@@ -978,7 +1028,6 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
 
     def __init__(
         self,
-        *args: tuple,
         max_active_calls: int = 20,
         retrier: AsyncRetrier | None = None,
         size: int | None = None,
@@ -990,11 +1039,12 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
             max_active_calls: The maximum number of concurrent API calls to make.
             retrier: An instance of the AsyncRetrier class to use for retrying failed calls.
                      If None, a new instance will be created with default parameters.
+            size: Estimated number of individual calls made. Required for measuring progress.
             args: Additional positional arguments to pass to the parent class.
             kwargs: Additional keyword arguments to pass to the parent class.
 
         """
-        super().__init__(size=size, *args, **kwargs)
+        super().__init__(size=size, **kwargs)
         self.semaphore = asyncio.Semaphore(max_active_calls)
         self.retrier = AsyncRetrier() if retrier is None else retrier
 
