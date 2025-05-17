@@ -3,49 +3,69 @@
 import asyncio
 import json
 from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
+from types import TracebackType
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from pytest_mock import MockerFixture
 
 import apicadabri
 
 
 # Source: https://stackoverflow.com/a/59351425
 class MockResponse:
-    def __init__(self, text, status, latency: float | Callable[[], float] = 0.0):
+    """Mocks aiohttp response object."""
+
+    def __init__(self, text: str, status: int, latency: float | Callable[[], float] = 0.0) -> None:
+        """Initialize mock object."""
         self._text = text
         self.status = status
         self.latency = latency
         self.content = MagicMock()
 
-    async def read(self):
+    async def read(self) -> bytes:
+        """Get content as bytes."""
         return self._text.encode("utf-8")
 
-    async def maybe_sleep(self):
+    async def maybe_sleep(self) -> None:
+        """Sleep if latency has been set."""
         if not isinstance(self.latency, (float, int)):
             await asyncio.sleep(self.latency())
         elif self.latency > 0:
             await asyncio.sleep(self.latency)
 
-    async def text(self):
+    async def text(self) -> str:
+        """Get content as string."""
         await self.maybe_sleep()
         return self._text
 
-    async def json(self):
+    async def json(self) -> Any:  # noqa: ANN401
+        """Get content as JSON."""
         await self.maybe_sleep()
         return json.loads(self._text)
 
-    async def __aexit__(self, exc_type, exc, tb):
-        pass
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> bool | None:
+        """Allow use in `async with`."""
+        return None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> AbstractAsyncContextManager | None:
+        """Allow use in `async with`."""
         return self
 
     def get_encoding(self) -> str:
+        """Return encoding of content."""
         return "utf-8"
 
 
-def test_simple_map(mocker):
+def test_simple_map(mocker: MockerFixture) -> None:
+    """Test hypothesis: Simple map method call yields expected result."""
     pokemon = ["bulbasaur", "squirtle", "charmander"]
 
     mocker.patch(
@@ -66,7 +86,8 @@ def test_simple_map(mocker):
     assert data == pokemon
 
 
-def test_simple_map_error(mocker):
+def test_simple_map_error(mocker: MockerFixture) -> None:
+    """Test hypothesis: With default settings, exceptions thrown in `map` will be re-raised."""
     pokemon = ["bulbasaur", "squirtle", "charmander"]
 
     mocker.patch(
@@ -89,7 +110,8 @@ def test_simple_map_error(mocker):
         )
 
 
-def test_safe_map_error(mocker):
+def test_safe_map_error(mocker: MockerFixture) -> None:
+    """Test hypothesis: When an error handling function is supplied, no exception will be raised."""
     pokemon = ["bulbasaur", "squirtle", "charmander"]
 
     mocker.patch(
@@ -112,7 +134,8 @@ def test_safe_map_error(mocker):
     assert data == ["bulbasaur", "'name'", "charmander"]
 
 
-def test_map_maybe_error(mocker):
+def test_map_maybe_error(mocker: MockerFixture) -> None:
+    """Test hypothesis: With `on_error="return`, an error object is returned."""
     pokemon = ["bulbasaur", "squirtle", "charmander"]
 
     mocker.patch(
