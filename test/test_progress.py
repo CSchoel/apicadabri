@@ -84,6 +84,10 @@ class TestArgumentsSize:
         args = ApicadabriCallArguments(urls=(x for x in ["foo", "bar", "baz"]), size=3)
         assert len(args) == 3
 
+
+class TestResponseSize:
+    """Tests for determining the size of ApicadabriResponse objects."""
+
     def test_response(self, mocker: MockerFixture) -> None:
         """Test hypothesis: Determining the size of a bulk call response is possible."""
         pokemon = ["bulbasaur", "squirtle", "charmander"]
@@ -94,6 +98,34 @@ class TestArgumentsSize:
         )
         data = bulk_get(
             urls=[f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon],
+        )
+        assert len(data) == 3
+
+    def test_response_iterator_without_hint(self, mocker: MockerFixture) -> None:
+        """Test hypothesis: Determining the size of a bulk call fails with iterable and no hint."""
+        pokemon = ["bulbasaur", "squirtle", "charmander"]
+
+        mocker.patch(
+            "aiohttp.ClientSession.get",
+            side_effect=lambda *args, **kwargs: MockResponse(),
+        )
+        data = bulk_get(
+            urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
+        )
+        with pytest.raises(ApicadabriSizeUnknownError):
+            len(data)
+
+    def test_response_iterator_with_hint(self, mocker: MockerFixture) -> None:
+        """Test hypothesis: Determining the size of a bulk call works with iterable and hint."""
+        pokemon = ["bulbasaur", "squirtle", "charmander"]
+
+        mocker.patch(
+            "aiohttp.ClientSession.get",
+            side_effect=lambda *args, **kwargs: MockResponse(),
+        )
+        data = bulk_get(
+            urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
+            size=3,
         )
         assert len(data) == 3
 
@@ -124,6 +156,40 @@ class TestArgumentsSize:
             )
             .json()
             .map(lambda x: x.keys())
+        )
+        assert len(data) == 3
+
+    def test_map_return(self, mocker: MockerFixture) -> None:
+        """Test hypothesis: Determining the size of a map response with "return" mode works."""
+        pokemon = ["bulbasaur", "squirtle", "charmander"]
+
+        mocker.patch(
+            "aiohttp.ClientSession.get",
+            side_effect=lambda *args, **kwargs: MockResponse(),
+        )
+        data = (
+            bulk_get(
+                urls=[f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon],
+            )
+            .json()
+            .map(lambda x: x.keys(), on_error="return")
+        )
+        assert len(data) == 3
+
+    def test_map_errorfunc(self, mocker: MockerFixture) -> None:
+        """Test hypothesis: Determining the size of a map response with error function works."""
+        pokemon = ["bulbasaur", "squirtle", "charmander"]
+
+        mocker.patch(
+            "aiohttp.ClientSession.get",
+            side_effect=lambda *args, **kwargs: MockResponse(),
+        )
+        data = (
+            bulk_get(
+                urls=[f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon],
+            )
+            .json()
+            .map(lambda x: x.keys(), on_error=lambda e, x: set())
         )
         assert len(data) == 3
 
