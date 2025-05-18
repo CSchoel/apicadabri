@@ -210,8 +210,7 @@ class ApicadabriCallArguments(BaseModel):
             msg = f"Mode {self.mode} not implemented."
             raise NotImplementedError(msg)
         return iter(
-            ApicadabriCallInstance(url=u, params=p, json=j, headers=h)
-            for u, p, j, h in combined
+            ApicadabriCallInstance(url=u, params=p, json=j, headers=h) for u, p, j, h in combined
         )
 
     def any_iterable(
@@ -262,7 +261,12 @@ class ApicadabriCallArguments(BaseModel):
         return self.any_iterable(self.headers, self.header_sets)
 
     def __len__(self) -> int:
-        """Return the number of calls that will be made by this argument config."""
+        """Return the number of calls that will be made by this argument config.
+
+        Raises:
+            ApicadabriSizeUnknownError if no size was provided and some input
+            iterables don't implement `__len__`.
+        """
         if self.size is not None:
             return self.size
         return self._calculate_size()
@@ -1262,8 +1266,7 @@ class ApicadabriBulkHTTPResponse(
     @overload
     def json(
         self,
-        on_error: Literal["raise"]
-        | Callable[[SyncedClientResponse, Exception], Any] = "raise",
+        on_error: Literal["raise"] | Callable[[SyncedClientResponse, Exception], Any] = "raise",
     ) -> ApicadabriResponse[Any]: ...
 
     @overload
@@ -1295,8 +1298,7 @@ class ApicadabriBulkHTTPResponse(
     @overload
     def text(
         self,
-        on_error: Literal["raise"]
-        | Callable[[SyncedClientResponse, Exception], str] = "raise",
+        on_error: Literal["raise"] | Callable[[SyncedClientResponse, Exception], str] = "raise",
     ) -> ApicadabriResponse[str]: ...
 
     @overload
