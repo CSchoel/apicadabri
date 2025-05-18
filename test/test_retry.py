@@ -62,7 +62,7 @@ class Failer:
         self.exception_class = exception_class
 
     def __call__(self, *args: list[Any], **kwargs: dict[str, Any]) -> MockResponse:
-        """Fail `n_fails` time with an exception of type `self.exception_class."""
+        """Fail `n_fails` time with an exception of type `self.exception_class`."""
         if self.fail_count < self.n_fails:
             msg = f"Fail {self.fail_count + 1}"
             self.fail_count += 1
@@ -164,7 +164,7 @@ def test_fail_once_filtered(mocker: MockerFixture) -> None:
 
 
 def test_fail_completely_filtered(mocker: MockerFixture) -> None:
-    """Test hypothesis: Retrier fals when an exception is raised that was not selected for retry."""
+    """Test hypothesis: Retrier fails when an exception is raised that was not selected for retry."""
     pokemon = ["bulbasaur"]
 
     mocker.patch(

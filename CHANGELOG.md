@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `AsyncRetrier` now tries for `max_retries + 1` times before failing to keep konsistent with the phrasing of REtries.
+- `AsyncRetrier` now tries for `max_retries + 1` times before failing to keep consistent with the phrasing of REtries.
 
 ## [0.4.0] - 2025-05-12
 
