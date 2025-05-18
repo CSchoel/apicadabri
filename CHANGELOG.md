@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Allows tracking progress through `tqdm` and the new `tee` method.
+- Missing examples and overview of main features and design patterns in README.
 
 ### Fixed
 
