@@ -164,7 +164,7 @@ def test_fail_once_filtered(mocker: MockerFixture) -> None:
 
 
 def test_fail_completely_filtered(mocker: MockerFixture) -> None:
-    """Test hypothesis: Retrier fails when an exception is raised that was not selected for retry."""
+    """Test hypothesis: Retrier fails on exception that was not selected for retry."""
     pokemon = ["bulbasaur"]
 
     mocker.patch(
