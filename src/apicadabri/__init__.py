@@ -169,7 +169,7 @@ class ApicadabriCallArguments(BaseModel):
         """If actual size is computable but size is given, validate that both match."""
         if isinstance(self.size, int):
             try:
-                actual_size = len(self)
+                actual_size = self._calculate_size()
                 if self.size != actual_size:
                     msg = (
                         f"Explicitly given size {self.size} does not correspond to"
@@ -210,7 +210,8 @@ class ApicadabriCallArguments(BaseModel):
             msg = f"Mode {self.mode} not implemented."
             raise NotImplementedError(msg)
         return iter(
-            ApicadabriCallInstance(url=u, params=p, json=j, headers=h) for u, p, j, h in combined
+            ApicadabriCallInstance(url=u, params=p, json=j, headers=h)
+            for u, p, j, h in combined
         )
 
     def any_iterable(
@@ -264,6 +265,14 @@ class ApicadabriCallArguments(BaseModel):
         """Return the number of calls that will be made by this argument config."""
         if self.size is not None:
             return self.size
+        return self._calculate_size()
+
+    def _calculate_size(self) -> int:
+        """Return the number of calls that will be made by this argument config.
+
+        This is an internal helper method that does not take size hints directly
+        given via `self.size` into account.
+        """
         op = min if self.mode == "zip" else mul
         size = 2**63 if self.mode == "zip" else 1
         for name, iterable in [
@@ -1253,7 +1262,8 @@ class ApicadabriBulkHTTPResponse(
     @overload
     def json(
         self,
-        on_error: Literal["raise"] | Callable[[SyncedClientResponse, Exception], Any] = "raise",
+        on_error: Literal["raise"]
+        | Callable[[SyncedClientResponse, Exception], Any] = "raise",
     ) -> ApicadabriResponse[Any]: ...
 
     @overload
@@ -1285,7 +1295,8 @@ class ApicadabriBulkHTTPResponse(
     @overload
     def text(
         self,
-        on_error: Literal["raise"] | Callable[[SyncedClientResponse, Exception], str] = "raise",
+        on_error: Literal["raise"]
+        | Callable[[SyncedClientResponse, Exception], str] = "raise",
     ) -> ApicadabriResponse[str]: ...
 
     @overload

@@ -84,6 +84,11 @@ class TestArgumentsSize:
         args = ApicadabriCallArguments(urls=(x for x in ["foo", "bar", "baz"]), size=3)
         assert len(args) == 3
 
+    def test_size_mismatch(self) -> None:
+        """Test hypothesis: An exception is thrown if size hint doesn't match the actual size."""
+        with pytest.raises(ValueError, match=r"does not correspond to actual size"):
+            _ = ApicadabriCallArguments(urls=["foo", "bar", "baz"], size=4)
+
 
 class TestResponseSize:
     """Tests for determining the size of ApicadabriResponse objects."""
