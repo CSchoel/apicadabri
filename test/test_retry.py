@@ -210,3 +210,19 @@ def test_backoff_five(mocker: MockerFixture) -> None:
     t = timeit.default_timer() - t
     assert t > 0.01 + 0.02 + 0.03 + 0.06 + 0.12
     assert t < 0.01 + 0.02 + 0.03 + 0.06 + 0.12 + 0.24
+
+
+def test_backoff_max_sleep_time(mocker: MockerFixture) -> None:
+    """Hypothesis: Exponential backoff sleeps for expected time on five retries."""
+    pokemon = ["bulbasaur"]
+    mocker.patch(
+        "aiohttp.ClientSession.get",
+        side_effect=Failer(5),
+    )
+    t = timeit.default_timer()
+    apicadabri.bulk_get(
+        urls=(f"https://pokeapi.co/api/v2/pokemon/{p}" for p in pokemon),
+        retrier=apicadabri.AsyncRetrier(max_sleep_s=0.03),
+    ).json().to_list()
+    t = timeit.default_timer() - t
+    assert t < 0.03 * 5
