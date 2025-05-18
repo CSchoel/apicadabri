@@ -67,7 +67,7 @@ class MockResponse:
 
 
 def test_multi_url() -> None:
-    """Test hypothesis: An actual call to a test API with multiple URLs yields expected results."""
+    """Hypothesis: An actual call to a test API with multiple URLs yields expected results."""
     pokemon = ["bulbasaur", "squirtle", "charmander"]
     data = (
         apicadabri.bulk_get(
@@ -82,7 +82,7 @@ def test_multi_url() -> None:
 
 
 def test_multi_url_mocked(mocker: MockerFixture) -> None:
-    """Test hypothesis: Bulk call with multiple URLs succeds if HTTP response is mocked."""
+    """Hypothesis: Bulk call with multiple URLs succeds if HTTP response is mocked."""
     pokemon = ["bulbasaur", "squirtle", "charmander"]
 
     mocker.patch(
@@ -105,7 +105,7 @@ def test_multi_url_mocked(mocker: MockerFixture) -> None:
 
 
 def test_multi_url_speed(mocker: MockerFixture) -> None:
-    """Test hypothesis: A single slow call doesn't significantly slow down a bulk call."""
+    """Hypothesis: A single slow call doesn't significantly slow down a bulk call."""
     random.seed(2456567663)
     data = {"answer": 42}
     resp = MockResponse(
@@ -155,7 +155,7 @@ def test_task_limit(
     max_active_calls: int,
     expected_time_s: float,
 ) -> None:
-    """Test hypothesis: Creating a lot of async tasks doesn't slow down processing too much."""
+    """Hypothesis: Creating a lot of async tasks doesn't slow down processing too much."""
     data = {"answer": 42}
     resp = MockResponse(json.dumps(data), 200, latency=0)
 

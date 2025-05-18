@@ -71,7 +71,7 @@ class Failer:
 
 
 def test_fail_once(mocker: MockerFixture) -> None:
-    """Test hypothesis: Default retrier will succeed when a response fails once."""
+    """Hypothesis: Default retrier will succeed when a response fails once."""
     pokemon = ["bulbasaur"]
 
     mocker.patch(
@@ -90,7 +90,7 @@ def test_fail_once(mocker: MockerFixture) -> None:
 
 
 def test_fail_exactly_max_retries(mocker: MockerFixture) -> None:
-    """Test hypothesis: Default retrier will succeed when a response fails multiple times."""
+    """Hypothesis: Default retrier will succeed when a response fails multiple times."""
     pokemon = ["bulbasaur"]
 
     mocker.patch(
@@ -109,7 +109,7 @@ def test_fail_exactly_max_retries(mocker: MockerFixture) -> None:
 
 
 def test_fail_over_max_retries(mocker: MockerFixture) -> None:
-    """Test hypothesis: Retrier will succeed when a response fails `max_retries` times."""
+    """Hypothesis: Retrier will succeed when a response fails `max_retries` times."""
     pokemon = ["bulbasaur"]
 
     mocker.patch(
@@ -129,7 +129,7 @@ def test_fail_over_max_retries(mocker: MockerFixture) -> None:
 
 
 def test_fail_completely(mocker: MockerFixture) -> None:
-    """Test hypothesis: Retrier will fail when a response fails `max_retries + 1` times."""
+    """Hypothesis: Retrier will fail when a response fails `max_retries + 1` times."""
     pokemon = ["bulbasaur"]
 
     mocker.patch(
@@ -144,7 +144,7 @@ def test_fail_completely(mocker: MockerFixture) -> None:
 
 
 def test_fail_once_filtered(mocker: MockerFixture) -> None:
-    """Test hypothesis: Retrier succeeds when a selected exception occurs once."""
+    """Hypothesis: Retrier succeeds when a selected exception occurs once."""
     pokemon = ["bulbasaur"]
 
     mocker.patch(
@@ -164,7 +164,7 @@ def test_fail_once_filtered(mocker: MockerFixture) -> None:
 
 
 def test_fail_completely_filtered(mocker: MockerFixture) -> None:
-    """Test hypothesis: Retrier fails on exception that was not selected for retry."""
+    """Hypothesis: Retrier fails on exception that was not selected for retry."""
     pokemon = ["bulbasaur"]
 
     mocker.patch(
@@ -181,7 +181,7 @@ def test_fail_completely_filtered(mocker: MockerFixture) -> None:
 
 
 def test_backoff_three(mocker: MockerFixture) -> None:
-    """Test hypothesis: Exponential backoff sleeps for expected time on three retries."""
+    """Hypothesis: Exponential backoff sleeps for expected time on three retries."""
     pokemon = ["bulbasaur"]
     mocker.patch(
         "aiohttp.ClientSession.get",
@@ -197,7 +197,7 @@ def test_backoff_three(mocker: MockerFixture) -> None:
 
 
 def test_backoff_five(mocker: MockerFixture) -> None:
-    """Test hypothesis: Exponential backoff sleeps for expected time on five retries."""
+    """Hypothesis: Exponential backoff sleeps for expected time on five retries."""
     pokemon = ["bulbasaur"]
     mocker.patch(
         "aiohttp.ClientSession.get",

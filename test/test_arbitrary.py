@@ -30,7 +30,7 @@ class ExampleTask(ApicadabriBulkResponse[str, int]):
 
 
 def test_arbitrary() -> None:
-    """Test hypothesis: We can use an arbitrary task with ApicadabriBulkResponse."""
+    """Hypothesis: We can use an arbitrary task with ApicadabriBulkResponse."""
     data = ["bulbasaur", "squirtle", "charmander"]
     task = ExampleTask(data)
     result = task.to_list()

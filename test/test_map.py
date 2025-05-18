@@ -65,7 +65,7 @@ class MockResponse:
 
 
 def test_simple_map(mocker: MockerFixture) -> None:
-    """Test hypothesis: Simple map method call yields expected result."""
+    """Hypothesis: Simple map method call yields expected result."""
     pokemon = ["bulbasaur", "squirtle", "charmander"]
 
     mocker.patch(
@@ -87,7 +87,7 @@ def test_simple_map(mocker: MockerFixture) -> None:
 
 
 def test_simple_map_error(mocker: MockerFixture) -> None:
-    """Test hypothesis: With default settings, exceptions thrown in `map` will be re-raised."""
+    """Hypothesis: With default settings, exceptions thrown in `map` will be re-raised."""
     pokemon = ["bulbasaur", "squirtle", "charmander"]
 
     mocker.patch(
@@ -111,7 +111,7 @@ def test_simple_map_error(mocker: MockerFixture) -> None:
 
 
 def test_safe_map_error(mocker: MockerFixture) -> None:
-    """Test hypothesis: When an error handling function is supplied, no exception will be raised."""
+    """Hypothesis: When an error handling function is supplied, no exception will be raised."""
     pokemon = ["bulbasaur", "squirtle", "charmander"]
 
     mocker.patch(
@@ -135,7 +135,7 @@ def test_safe_map_error(mocker: MockerFixture) -> None:
 
 
 def test_map_maybe_error(mocker: MockerFixture) -> None:
-    """Test hypothesis: With `on_error="return`, an error object is returned."""
+    """Hypothesis: With `on_error="return`, an error object is returned."""
     pokemon = ["bulbasaur", "squirtle", "charmander"]
 
     mocker.patch(
