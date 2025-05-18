@@ -1,6 +1,6 @@
 [project]
 name = "apicadabri"
-version = "0.4.0"
+version = "0.5.0"
 description = "Magical tools to interact with web APIs from a data scientist's perspective."
 readme = "README.md"
 authors = [
@@ -46,6 +46,7 @@ dependencies = [
     "humanize>=4.12.3",
     "multidict>=6.2.0",
     "pydantic>=2.10.6",
+    "tqdm>=4.67.1",
     "yarl>=1.18.3",
 ]
 
@@ -68,9 +69,6 @@ indent-width = 4
 # Assume Python 3.11
 target-version = "py311"
 
-# Select all rules by default
-select = ["ALL"]
-
 [tool.ruff.format]
 # Like Black, use double quotes for strings.
 quote-style = "double"
@@ -79,12 +77,17 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.ruff.lint]
+# Select all rules by default
+select = ["ALL"]
 ignore = [
     "TD002", # adding an author to TODOs wastes space and is redundant because of git history
     "TD003", # once there is an issue, there is no need to keep the TODO => don't require links
 ]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
 # source: https://github.com/astral-sh/ruff/issues/4368#issue-1705468153
 "test/**/*.py" = [
     # at least this three should be fine in tests:
@@ -94,6 +97,7 @@ ignore = [
     # The below are debateable
     "PLR2004", # Magic value used in comparison, ...
     "S311",    # Standard pseudo-random generators are not suitable for cryptographic purposes
+    "INP001",  # Test folders should not have an `__init__.py`
 ]
 
 [dependency-groups]
