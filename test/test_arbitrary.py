@@ -7,7 +7,7 @@ from aiohttp import ClientSession
 from apicadabri import ApicadabriBulkResponse
 
 
-class TestTask(ApicadabriBulkResponse[str, int]):
+class ExampleTask(ApicadabriBulkResponse[str, int]):
     """Test task as example for using Apicadabri without aiotthp."""
 
     def __init__(self, data: list[str], max_active_calls: int = 10) -> None:
@@ -32,7 +32,7 @@ class TestTask(ApicadabriBulkResponse[str, int]):
 def test_arbitrary() -> None:
     """Test hypothesis: We can use an arbitrary task with ApicadabriBulkResponse."""
     data = ["bulbasaur", "squirtle", "charmander"]
-    task = TestTask(data)
+    task = ExampleTask(data)
     result = task.to_list()
     assert len(result) == len(data)
     assert result == [9, 8, 10]
