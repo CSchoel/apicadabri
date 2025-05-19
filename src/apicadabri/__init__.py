@@ -346,7 +346,7 @@ class ApicadabriResponse(Generic[R]):
 
     """
 
-    def __init__(self, size: int | None, **kwargs: dict[str, Any]) -> None:
+    def __init__(self, size: int | None, **kwargs: Any) -> None:  # noqa: ANN401
         """Create a new response object.
 
         Args:
@@ -442,7 +442,7 @@ class ApicadabriResponse(Generic[R]):
 
         return asyncio.run(self.reduce(appender, start=start))
 
-    def tqdm(self, **tqdm_args: dict[str, Any]) -> "ApicadabriResponse[R]":
+    def tqdm(self, **tqdm_args: Any) -> "ApicadabriResponse[R]":  # noqa: ANN401
         """Print a progress bar using tqdm when the pipeline execution reaches this step.
 
         Args:
@@ -530,7 +530,7 @@ class ApicadabriTeeResponse(ApicadabriResponse[R], Generic[R]):
         func: Callable[[R, int, int | None], Any],
         *,
         ignore_errors: bool = True,
-        **kwargs: dict[str, Any],
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         """Initialize the response object.
 
@@ -576,7 +576,7 @@ class ApicadabriMapResponse(ApicadabriResponse[S], Generic[R, S]):
         self,
         base: ApicadabriResponse[R],
         func: Callable[[R], S],
-        **kwargs: dict[str, Any],
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         """Initialize the response object.
 
@@ -615,7 +615,7 @@ class ApicadabriSafeMapResponse(ApicadabriResponse[S], Generic[R, S]):
         base: ApicadabriResponse[R],
         map_func: Callable[[R], S],
         error_func: Callable[[R, Exception], S],
-        **kwargs: dict[str, Any],
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         """Initialize the response object.
 
@@ -707,7 +707,7 @@ class ApicadabriMaybeMapResponse(
         self,
         base: ApicadabriResponse[R],
         func: Callable[[R], S],
-        **kwargs: dict[str, Any],
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         """Initialize the response object.
 
@@ -745,7 +745,7 @@ class ApicadabriTqdmResponse(ApicadabriResponse[R], Generic[R]):
         self,
         base: ApicadabriResponse[R],
         tqdm_args: dict[str, Any],
-        **kwargs: dict[str, Any],
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         """Initialize the response object.
 
@@ -1104,7 +1104,7 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
         max_active_calls: int = 20,
         retrier: AsyncRetrier | None = None,
         size: int | None = None,
-        **kwargs: dict[str, Any],
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         """Initialize the response object.
 
@@ -1201,7 +1201,7 @@ class ApicadabriBulkHTTPResponse(
         method: Literal["POST", "GET"],
         max_active_calls: int = 20,
         retrier: AsyncRetrier | None = None,
-        **kwargs: dict[str, Any],
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         """Initialize the response object.
 
@@ -1351,7 +1351,7 @@ def bulk_get(  # noqa: PLR0913
     max_active_calls: int = 20,
     retrier: AsyncRetrier | None = None,
     size: int | None = None,
-    **kwargs: dict[str, Any],
+    **kwargs: Any,  # noqa: ANN401
 ) -> ApicadabriBulkHTTPResponse:
     """Make a bulk GET request to the given API endpoint.
 
@@ -1432,7 +1432,7 @@ def bulk_post(  # noqa: PLR0913
     max_active_calls: int = 20,
     retrier: AsyncRetrier | None = None,
     size: int | None = None,
-    **kwargs: dict[str, Any],
+    **kwargs: Any,  # noqa: ANN401
 ) -> ApicadabriBulkHTTPResponse:
     """Make a bulk POST request to the given API endpoint.
 
@@ -1506,7 +1506,7 @@ def bulk_call(
     apicadabri_args: ApicadabriCallArguments,
     max_active_calls: int = 20,
     retrier: AsyncRetrier | None = None,
-    **kwargs: dict[str, Any],
+    **kwargs: Any,  # noqa: ANN401
 ) -> ApicadabriBulkHTTPResponse:
     """Make a bulk API call to the given API endpoint.
 
