@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Type hints for `**kwargs` now properly use `Any` instead of `dict[str, Any]`.
+
 ## [0.5.0] - 2025-05-18
 
 ### Added
