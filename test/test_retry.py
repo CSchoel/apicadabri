@@ -61,7 +61,7 @@ class Failer:
         self.fail_count = 0
         self.exception_class = exception_class
 
-    def __call__(self, *args: list[Any], **kwargs: dict[str, Any]) -> MockResponse:
+    def __call__(self, *args: Any, **kwargs: Any) -> MockResponse:  # noqa: ANN401
         """Fail `n_fails` time with an exception of type `self.exception_class`."""
         if self.fail_count < self.n_fails:
             msg = f"Fail {self.fail_count + 1}"
