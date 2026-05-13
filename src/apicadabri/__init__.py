@@ -1081,7 +1081,6 @@ class AsyncRetrier:
         msg = "Max retries reached, but no exception stored. This should never happen!"
         raise RuntimeError(msg)
 
-
 class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
     """Response class for bulk API calls.
 
@@ -1188,6 +1187,62 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
     def instances(self) -> Iterable[A]:
         """Generate instances of the API call arguments."""
         ...
+
+class PoisonPill:
+    @classmethod
+    def get_instance(cls):
+        if not hasattr(cls, "inst"):
+            cls.inst = PoisonPill()
+        return cls.inst
+    
+
+class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], Generic[A, R], ABC):
+    async def execute_task_group(self):
+        self.result_queue: asyncio.Queue[R | PoisonPill] = asyncio.Queue()
+        async def worker(client: aiohttp.ClientSession, args: A):
+            _, res = await self.call_with_semaphore(client, 0, args)
+            await self.result_queue.put(res)
+        async with aiohttp.ClientSession() as client:
+            async with asyncio.TaskGroup() as tg:
+                self.tg = tg
+                for inst in self.instances():
+                    tg.create_task(worker(client, inst))
+        await self.result_queue.put(PoisonPill.get_instance())
+
+    async def call_all(self) -> AsyncGenerator[R, None]:
+        """Return an iterator that yields the results of the API calls.
+
+        This uses a semaphore to limit the number of concurrent API calls.
+
+        It returns results in the same order as the input arguments from
+        `instances`. However, it also allows to inspect and process results
+        as they arrive.
+        """
+        next_index = 0
+        buffer: list[tuple[int, R]] = []
+        # TODO: Concurrent task receives work items from queue and puts results in second queue, this task receives results from result queue and returns them
+        asyncio.create_task(self.execute_task_group())
+        while True:
+            result = await self.result_queue.get()
+        async with aiohttp.ClientSession() as client:
+            for res in asyncio.as_completed(
+                [
+                    self.call_with_semaphore(client, i, instance)
+                    for i, instance in enumerate(self.instances())
+                ],
+            ):
+                current_index, current_res = await res
+                insort_right(buffer, (current_index, current_res), key=lambda x: -x[0])
+                while current_index == next_index:
+                    yield buffer.pop()[1]
+                    current_index = buffer[-1][0] if len(buffer) > 0 else -1
+                    next_index += 1
+
+    @abstractmethod
+    def instances(self) -> Iterable[A]:
+        """Generate instances of the API call arguments."""
+        self.task_queue = asyncio.Queue()
+
 
 
 class ApicadabriBulkHTTPResponse(
