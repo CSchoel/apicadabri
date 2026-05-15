@@ -8,18 +8,22 @@ from apicadabri.recursive import ApicadabriRecursiveResponse
 
 
 class DummyRR(ApicadabriRecursiveResponse[tuple[int, ...], str]):
+    """Dummy class for testing recursive tasks."""
+
     async def call_api(
         self,
         client: ClientSession,
         index: int,
         instance_args: tuple[int, ...],
     ) -> tuple[int, str]:
+        """Dummy api call that just turns input to string and spawns one level of subtasks."""
         if len(instance_args) == 1:
             for i in range(3):
                 await self.schedule_subtask(client, (*list(instance_args), i))
         return (index, str(".".join([str(x) for x in instance_args])))
 
     def instances(self) -> Iterable[tuple[int, ...]]:
+        """Returns dummy instances."""
         return [(1,), (2,)]
 
 
