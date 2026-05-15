@@ -8,14 +8,19 @@ from apicadabri.recursive import ApicadabriRecursiveResponse
 
 
 class DummyRR(ApicadabriRecursiveResponse[int, str]):
-    async def call_api(self, client: ClientSession, index: int, instance_args: int) -> tuple[int, str]:
+    async def call_api(
+        self, client: ClientSession, index: int, instance_args: int
+    ) -> tuple[int, str]:
         for i in range(3):
             self.task_group.create_task(self.subtask(instance_args, i))
         return (index, str(instance_args))
+
     async def subtask(self, instance_args: int, subtask_args: int) -> None:
         await self.result_queue.put(f"{instance_args}.{subtask_args}")
+
     def instances(self) -> Iterable[int]:
         return [1, 2]
+
 
 class TestRecursiveResponse:
     """Tests for determining the size of APicadabriCallArguments."""
