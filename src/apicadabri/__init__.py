@@ -165,6 +165,30 @@ class ApicadabriCallArguments(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def validate_url_provided(self) -> Self:
+        """Validate that either `url` or `urls` is provided."""
+        if self.url is None and self.urls is None:
+            msg = "You have to specify either `url` or `urls`."
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def validate_at_least_one_iterable(self) -> Self:
+        """Validate that we have at least one iterable.
+
+        This is an internal guarantee we need to make to combine iterators correctly.
+        It can be achieved by using a single-item list for `urls` instead of `url`
+        if needed.
+        """
+        if all(x is None for x in (self.urls, self.param_sets, self.json_sets, self.header_sets)):
+            if self.url is None:
+                msg = "You have to specify either `url` or `urls`."
+                raise ValueError(msg)
+            self.urls = [self.url]
+            self.url = None
+        return self
+
+    @model_validator(mode="after")
     def validate_size(self) -> Self:
         """If actual size is computable but size is given, validate that both match."""
         if isinstance(self.size, int):
