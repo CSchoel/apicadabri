@@ -278,13 +278,15 @@ class ApicadabriCallArguments(BaseModel):
         given via `self.size` into account.
         """
         op = min if self.mode == "zip" else mul
-        size = 2**63 if self.mode == "zip" else 1
-        for name, iterable in [
+        iterable_args = [
             ("urls", self.urls),
             ("param_sets", self.param_sets),
             ("json_sets", self.json_sets),
             ("header_sets", self.header_sets),
-        ]:
+        ]
+        all_empty = all(x is None or len(x) == 0 for _, x in iterable_args)
+        size = 2**63 if self.mode == "zip" and not all_empty else 1
+        for name, iterable in iterable_args:
             if iterable is None:
                 continue
             try:
