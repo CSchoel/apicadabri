@@ -2,9 +2,11 @@
 
 from collections.abc import Iterable
 
+import aiohttp
 from aiohttp import ClientSession
 
-from apicadabri.recursive import ApicadabriRecursiveResponse
+from apicadabri import ApicadabriCallInstance, SyncedClientResponse
+from apicadabri.recursive import ApicadabriRecursiveResponse, recursive_get
 
 
 class DummyRR(ApicadabriRecursiveResponse[tuple[int, ...], str]):
@@ -35,3 +37,21 @@ class TestRecursiveResponse:
         result = DummyRR()
         res = result.to_list()
         assert {"1", "1.0", "1.1", "1.2", "2", "2.0", "2.1", "2.2"} == set(res)
+
+
+class TestRecursiveGet:
+    """Tests for the top-level `recursive_get` function."""
+
+    def test_wiki(self) -> None:
+        def create_subtask(
+            client: aiohttp.ClientSession,
+            index: int,
+            instance_args: ApicadabriCallInstance,
+            result: SyncedClientResponse,
+        ) -> Iterable[ApicadabriCallInstance]:
+            return []
+
+        res = recursive_get(
+            url="https://en.wikipedia.org/wiki/Snake", subtask_creator=create_subtask
+        )
+        assert res == None
