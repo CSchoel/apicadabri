@@ -42,7 +42,6 @@ class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], Generic[A, R], A
 
         This method only returns after all the tasks in the task group have actually finished.‚
         """
-        self.result_queue: asyncio.Queue[R | PoisonPill] = asyncio.Queue()
         async def worker(client: aiohttp.ClientSession, args: A) -> None:
             """Performs individual calls and puts result into result queue.
 
@@ -69,6 +68,7 @@ class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], Generic[A, R], A
         """
         # TODO: Concurrent task receives work items from queue and puts results in second queue, this task receives results from result queue and returns them
         # result needs to be stored to avoid garbage collection
+        self.result_queue: asyncio.Queue[R | PoisonPill] = asyncio.Queue()
         self._main_task = asyncio.create_task(self.execute_task_group())
         result = await self.result_queue.get()
         while not isinstance(result, PoisonPill):
