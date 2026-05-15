@@ -7,26 +7,27 @@ from aiohttp import ClientSession
 from apicadabri.recursive import ApicadabriRecursiveResponse
 
 
-class DummyRR(ApicadabriRecursiveResponse[int, str]):
+class DummyRR(ApicadabriRecursiveResponse[tuple[int, ...], str]):
     async def call_api(
-        self, client: ClientSession, index: int, instance_args: int
+        self,
+        client: ClientSession,
+        index: int,
+        instance_args: tuple[int, ...],
     ) -> tuple[int, str]:
-        for i in range(3):
-            self.task_group.create_task(self.subtask(instance_args, i))
-        return (index, str(instance_args))
+        if len(instance_args) == 1:
+            for i in range(3):
+                await self.schedule_subtask(client, (*list(instance_args), i))
+        return (index, str(".".join([str(x) for x in instance_args])))
 
-    async def subtask(self, instance_args: int, subtask_args: int) -> None:
-        await self.result_queue.put(f"{instance_args}.{subtask_args}")
-
-    def instances(self) -> Iterable[int]:
-        return [1, 2]
+    def instances(self) -> Iterable[tuple[int, ...]]:
+        return [(1,), (2,)]
 
 
 class TestRecursiveResponse:
-    """Tests for determining the size of APicadabriCallArguments."""
+    """Tests for base functionality of ApicadabriRecursiveResponse."""
 
     def test_dummy(self) -> None:
-        """Hypothesis: With a single list input, the size can be determined without hints."""
+        """Hypothesis: A task that spawns subtasks returns all subtask responses without errors."""
         result = DummyRR()
         res = result.to_list()
         assert {"1", "1.0", "1.1", "1.2", "2", "2.0", "2.1", "2.2"} == set(res)
