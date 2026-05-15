@@ -1188,6 +1188,7 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
         """Generate instances of the API call arguments."""
         ...
 
+# FUTURE: In Python 3.13 this can be replaced with asyncio.Queue.shutdown
 class PoisonPill:
     @classmethod
     def get_instance(cls):
@@ -1204,7 +1205,7 @@ class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], Generic[A, R], A
             await self.result_queue.put(res)
         async with aiohttp.ClientSession() as client:
             async with asyncio.TaskGroup() as tg:
-                self.tg = tg
+                self.task_group = tg
                 for inst in self.instances():
                     tg.create_task(worker(client, inst))
         await self.result_queue.put(PoisonPill.get_instance())
@@ -1222,21 +1223,11 @@ class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], Generic[A, R], A
         buffer: list[tuple[int, R]] = []
         # TODO: Concurrent task receives work items from queue and puts results in second queue, this task receives results from result queue and returns them
         asyncio.create_task(self.execute_task_group())
-        while True:
-            result = await self.result_queue.get()
-        async with aiohttp.ClientSession() as client:
-            for res in asyncio.as_completed(
-                [
-                    self.call_with_semaphore(client, i, instance)
-                    for i, instance in enumerate(self.instances())
-                ],
-            ):
-                current_index, current_res = await res
-                insort_right(buffer, (current_index, current_res), key=lambda x: -x[0])
-                while current_index == next_index:
-                    yield buffer.pop()[1]
-                    current_index = buffer[-1][0] if len(buffer) > 0 else -1
-                    next_index += 1
+        result = await self.result_queue.get()
+        while not isinstance(result, PoisonPill):
+            # TODO maybe we also want to do some re-ordering here in the future?
+            yield result
+            result = await self.result_queue.get()            
 
     @abstractmethod
     def instances(self) -> Iterable[A]:
