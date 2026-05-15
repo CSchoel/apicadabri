@@ -1,11 +1,13 @@
 """Tests related to recursive tasks."""
 
+import re
 from collections.abc import Iterable
+import warnings
 
 import aiohttp
 from aiohttp import ClientSession
 
-from apicadabri import ApicadabriCallInstance, SyncedClientResponse
+from apicadabri import ApicadabriCallArguments, ApicadabriCallInstance, SyncedClientResponse
 from apicadabri.recursive import ApicadabriRecursiveResponse, recursive_get
 
 
@@ -43,15 +45,28 @@ class TestRecursiveGet:
     """Tests for the top-level `recursive_get` function."""
 
     def test_wiki(self) -> None:
+        """Hypothesis: A task that crawls websites recursively returns all expected results."""
+        self.download_counter = 0
+
         def create_subtask(
             client: aiohttp.ClientSession,
             index: int,
             instance_args: ApicadabriCallInstance,
             result: SyncedClientResponse,
         ) -> Iterable[ApicadabriCallInstance]:
+            text = result.text()
+            warnings.warn(str(text))
+            first_link = re.search(pattern=r'href="([^"]+?)"', string=text)
+            if first_link is not None and self.download_counter < 4:
+                self.download_counter += 1
+                return ApicadabriCallArguments(url=first_link.group(1))
             return []
 
         res = recursive_get(
-            url="https://en.wikipedia.org/wiki/Snake", subtask_creator=create_subtask
-        )
-        assert res == None
+            url="https://en.wikipedia.org/wiki/Snake",
+            headers={
+                "User-Agent": "ApicadabriBot/1.0 (https://arbitrary-but-fixed.net/; apicadabri@arbitrary-but-fixed.org) apicadabri/1.0"
+            },
+            subtask_creator=create_subtask,
+        ).to_list()
+        assert len(res) == 5
