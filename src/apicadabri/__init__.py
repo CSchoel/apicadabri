@@ -308,8 +308,8 @@ class ApicadabriCallArguments(BaseModel):
             ("json_sets", self.json_sets),
             ("header_sets", self.header_sets),
         ]
-        all_empty = all(x is None or len(x) == 0 for _, x in iterable_args)
-        size = 2**63 if self.mode == "zip" and not all_empty else 1
+        all_undefined = all(x is None for _, x in iterable_args)
+        size = 2**63 if self.mode == "zip" and not all_undefined else 1
         for name, iterable in iterable_args:
             if iterable is None:
                 continue
