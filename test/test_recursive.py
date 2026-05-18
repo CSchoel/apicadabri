@@ -2,12 +2,17 @@
 
 import re
 from collections.abc import Iterable
-import warnings
+from urllib.parse import urljoin
 
 import aiohttp
 from aiohttp import ClientSession
 
-from apicadabri import ApicadabriCallArguments, ApicadabriCallInstance, SyncedClientResponse
+from apicadabri import (
+    ApicadabriCallArguments,
+    ApicadabriCallInstance,
+    AsyncRetrier,
+    SyncedClientResponse,
+)
 from apicadabri.recursive import ApicadabriRecursiveResponse, recursive_get
 
 
@@ -55,18 +60,21 @@ class TestRecursiveGet:
             result: SyncedClientResponse,
         ) -> Iterable[ApicadabriCallInstance]:
             text = result.text()
-            warnings.warn(str(text))
-            first_link = re.search(pattern=r'href="([^"]+?)"', string=text)
+            first_link = re.search(pattern=r'href="([^"]+?.html?)"', string=text)
             if first_link is not None and self.download_counter < 4:
                 self.download_counter += 1
-                return ApicadabriCallArguments(url=first_link.group(1))
+                url = first_link.group(1)
+                absolute_url = urljoin(instance_args.url, url)
+                return ApicadabriCallArguments(url=absolute_url, headers=self.headers)
             return []
 
+        self.headers = {
+            "User-Agent": "ApicadabriBot/1.0 (https://arbitrary-but-fixed.net/; apicadabri@arbitrary-but-fixed.org) apicadabri/1.0"
+        }
         res = recursive_get(
-            url="https://en.wikipedia.org/wiki/Snake",
-            headers={
-                "User-Agent": "ApicadabriBot/1.0 (https://arbitrary-but-fixed.net/; apicadabri@arbitrary-but-fixed.org) apicadabri/1.0"
-            },
+            url="https://arbitrary-but-fixed.net/",
+            headers=self.headers,
             subtask_creator=create_subtask,
+            retrier=AsyncRetrier(),
         ).to_list()
         assert len(res) == 5
