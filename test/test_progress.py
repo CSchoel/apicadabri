@@ -54,6 +54,12 @@ class MockResponse:
 class TestArgumentsSize:
     """Tests for determining the size of APicadabriCallArguments."""
 
+    def test_len_single(self) -> None:
+        """Hypothesis: With a single input using only the `url` field, the size is one."""
+        args = ApicadabriCallArguments(url="http://foo.bar")
+        assert len(args) == 1
+        assert len(list(args)) == 1
+
     def test_one_sized_arg(self) -> None:
         """Hypothesis: With a single list input, the size can be determined without hints."""
         args = ApicadabriCallArguments(urls=["foo", "bar", "baz"])
