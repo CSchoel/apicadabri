@@ -69,7 +69,10 @@ class TestRecursiveGet:
             return []
 
         self.headers = {
-            "User-Agent": "ApicadabriBot/1.0 (https://arbitrary-but-fixed.net/; apicadabri@arbitrary-but-fixed.org) apicadabri/1.0"
+            "User-Agent": (
+                "ApicadabriBot/1.0 (https://arbitrary-but-fixed.net/;"
+                " apicadabri@arbitrary-but-fixed.org) apicadabri/1.0"
+            ),
         }
         res = recursive_get(
             url="https://arbitrary-but-fixed.net/",
