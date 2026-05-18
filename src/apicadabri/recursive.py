@@ -151,13 +151,16 @@ class ApicadabriRecursiveHTTPResponse(
             method: The HTTP method to use for the API call (GET or POST).
             max_active_calls: The maximum number of concurrent API calls to make.
             retrier: An instance of the AsyncRetrier class to use for retrying failed calls.
-                     If None, a new instance will be created with default parameters.
+                    If None, a new instance will be created with default parameters.
             subtask_creator: Function that decides whether to spawn subtasks from an API call.
+                    The response object will acquire an object-wide lock before calling this
+                    function, so it should be safe to use shared state within this function.
             kwargs: Additional keyword arguments to pass to the aiohttp get/post method.
 
         """
         super().__init__(apicadabri_args, method, max_active_calls, retrier, **kwargs)
         self.create_subtasks = subtask_creator
+        self.create_subtasks_lock = asyncio.Lock()
 
     async def call_api(
         self,
@@ -176,7 +179,9 @@ class ApicadabriRecursiveHTTPResponse(
             instance_args: The arguments to pass to the API call.
         """
         idx, result = await super().call_api(client, index, instance_args)
-        for sub in self.create_subtasks(client, idx, instance_args, result):
+        async with self.create_subtasks_lock:
+            subtasks = self.create_subtasks(client, idx, instance_args, result)
+        for sub in subtasks:
             await self.schedule_subtask(client, sub)
         return (idx, result)
 
