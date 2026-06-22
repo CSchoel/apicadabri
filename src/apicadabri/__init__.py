@@ -28,6 +28,8 @@ from pydantic import (
 )
 from tqdm.asyncio import tqdm
 
+from apicadabri.helpers import BufferedOrderer
+
 # source: https://stackoverflow.com/a/76646986
 # NOTE: we could use "JSON" instead of Any here to define a recursive type
 # however, this won't work with pydantic, so we settle for a shallow representation here
@@ -1156,8 +1158,7 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
         `instances`. However, it also allows to inspect and process results
         as they arrive.
         """
-        next_index = 0
-        buffer: list[tuple[int, R]] = []
+        orderer: BufferedOrderer[R] = BufferedOrderer()
         # TODO: would it make sense to allow generic types of sessions here instead of aiohttp?
         async with aiohttp.ClientSession() as client:
             for res in asyncio.as_completed(
@@ -1167,11 +1168,9 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
                 ],
             ):
                 current_index, current_res = await res
-                insort_right(buffer, (current_index, current_res), key=lambda x: -x[0])
-                while current_index == next_index:
-                    yield buffer.pop()[1]
-                    current_index = buffer[-1][0] if len(buffer) > 0 else -1
-                    next_index += 1
+                orderer.insert_in_order(current_index, current_res)
+                for nxt in await orderer.retrieve_next():
+                    yield nxt
 
     async def call_with_semaphore(
         self,
