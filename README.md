@@ -202,6 +202,40 @@ There are two ways of tracking the progress of an apicadabri bulk call:
 
 ℹ️ Note that the total number of calls is only known if all user-supplied iterables implement `__len__` or if a size hint was explicitly given with the `size` argument.
 
+## Recursive calls
+
+Sometimes you want to spawn subtasks from your initial calls, be it because you have to traverse a tree structure in an API or because you just want to crawl a regular HTML website.
+For this purpose, Apicadabri provides a set of recursive methods which accept two additional parameters:
+
+* `subtask_creator` is a callback function that can inspect a result and return a number of subsequent call parameters that should be executed as subtasks.
+* `return_in_order` defaults to True, which returns the results in breadth-first order (first the initial tasks, then their children, then the children of their children, etc.).
+    Since this requires an internal buffer that doesn't behave as predictable as the normal buffer in the non-recursive scenario, it could lead to out of memory errors or pauses and sudden bursts of results returned.
+    If you experience any of these, set this parameter to False.
+
+Example:
+
+```python
+import aiohttp
+from apicadabri import ApicadabriCallArguments, AsyncRetrier
+from apicadabri.recursive import recursive_get
+from typing import cast
+data = (
+    recursive_get(
+        urls=[f"https://pokeapi.co/api/v2/pokemon/{id}" for id in range(1, 3)],
+        subtask_creator=lambda client, index, instance_args, result: ApicadabriCallArguments(
+            urls=[x["ability"]["url"] for x in cast("dict[str, Any]", result.json())["abilities"]],
+        )
+        if "abilities" in cast("dict[str, Any]", result.json())
+        else [],
+        retrier=AsyncRetrier(max_retries=1),
+        timeout=aiohttp.ClientTimeout(total=0.5),
+    )
+    .json()
+    .tqdm()
+    .to_list()
+)
+```
+
 ## Using apicadabri for arbitrary async tasks
 
 The examples presented so far all use HTTP calls through `aiohttp`.
