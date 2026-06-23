@@ -52,8 +52,30 @@ class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], Generic[A, R], A
             for top-level and subtasks.
     """
 
-    def __init__(self, *args, return_in_order: bool = True, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        max_active_calls: int = 20,
+        retrier: AsyncRetrier | None = None,
+        size: int | None = None,
+        *,
+        return_in_order: bool = True,
+        **kwargs: Any,  # noqa: ANN401
+    ) -> None:
+        """Creates a new response object.
+
+        Args:
+            max_active_calls: The maximum number of concurrent API calls to make.
+            retrier: An instance of the AsyncRetrier class to use for retrying failed calls.
+                    If None, a new instance will be created with default parameters.
+            size: Estimated number of individual calls made. Required for measuring progress.
+            return_in_order: If True, results are returned in breadth-first order of their
+                    creation in the recursive tree of subtasks. Set this to False if you
+                    experience out of memory errors or long pauses and sudden bursts of
+                    results in your pipeline. These effects can occur due to the buffering
+                    of results required to return them in order.
+            kwargs: Additional keyword arguments to pass to the parent class.
+        """
+        super().__init__(max_active_calls=max_active_calls, retrier=retrier, size=size, **kwargs)
         self.indexer = SubtaskIndexer()
         self.return_in_order = return_in_order
 
@@ -131,7 +153,7 @@ class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], Generic[A, R], A
         result = await pop_result()
         while not isinstance(result, PoisonPill):
             if self.return_in_order:
-                for nxt in await orderer.retrieve_next():
+                for nxt in await orderer.retrieve_next_in_line():
                     yield nxt
             else:
                 yield result
@@ -139,6 +161,8 @@ class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], Generic[A, R], A
 
 
 class SubtaskCreator(Protocol):
+    """Protocol for providing subtask creator functions as callback."""
+
     def __call__(
         self,
         client: aiohttp.ClientSession,
@@ -240,22 +264,55 @@ class SubtaskIndexer:
             The next index to expect.
         """
         async with self.single_to_tuple_lock:
-            return (
-                self.ordered_tuples[-(n + 1)]
-                if len(self.ordered_tuples) >= n + 1
-                else None
-            )
+            return self.ordered_tuples[-(n + 1)] if len(self.ordered_tuples) >= n + 1 else None
 
 
 class BufferedOrdererTuple(BufferedOrdererBase[tuple[int, ...], R]):
-    def __init__(self, indexer: SubtaskIndexer, *args, **kwargs):
+    """BufferedOrderer that uses int tuples as indices.
+
+    The indices are hierarchical, so (1,3,0) would mean the first child task
+    of the 4th child task of the second initial task, for example.
+    """
+
+    def __init__(self, indexer: SubtaskIndexer, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+        """Create a new orderer.
+
+        Args:
+            indexer: Indexer required for determining which index is next in line.
+            args: Unused, just provided for compatibility with multiple inheritance.
+            kwargs: Unused, just provided for compatibility with multiple inheritance.
+        """
         super().__init__(*args, **kwargs)
         self.indexer = indexer
 
     def sorting_key(self, index: tuple[int, ...]) -> Ordered:
+        """Sorts indices by length (shortest last) and reverse tuple order.
+
+        The goal is to retrieve indices in breadth-first order.
+
+        Args:
+            index: The index.
+
+        Returns:
+            A key for sorting a buffer of indices.
+        """
         return (-len(index), tuple(-i for i in index))
 
     async def next_expected_index(self, n: int) -> tuple[int, ...] | None:
+        """Retrieves next expected index from Indexer.
+
+        This is required, because we cannot easily determine how many children
+        a particular element has. Is (1,3) the next index after (1,2) or is it (2,0)?
+
+        The indexer can give us this information because it is aware of all
+        currently existing indices before subtasks are even scheduled.
+
+        Args:
+            n: Number of results already retrieved from this buffer.
+
+        Returns:
+            The index that is next in line in breadth-first order.
+        """
         return await self.indexer.next_index(n)
 
 
@@ -265,17 +322,16 @@ class ApicadabriRecursiveHTTPResponse(
 ):
     """Response class for recursive HTTP API calls."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         apicadabri_args: ApicadabriCallArguments,
         method: Literal["POST", "GET"],
         max_active_calls: int = 20,
         retrier: AsyncRetrier | None = None,
-        subtask_creator: SubtaskCreator = lambda client,
-        index,
-        instance_args,
-        result: [],  # noqa: ARG005
-        sort_results: bool = False,
+        size: int | None = None,
+        subtask_creator: SubtaskCreator = lambda client, index, instance_args, result: [],  # noqa: ARG005
+        *,
+        return_in_order: bool = False,
         **kwargs: Any,  # noqa: ANN401
     ) -> None:
         """Initialize the response object.
@@ -286,16 +342,28 @@ class ApicadabriRecursiveHTTPResponse(
             max_active_calls: The maximum number of concurrent API calls to make.
             retrier: An instance of the AsyncRetrier class to use for retrying failed calls.
                     If None, a new instance will be created with default parameters.
+            size: Estimated number of individual calls made. Required for measuring progress.
             subtask_creator: Function that decides whether to spawn subtasks from an API call.
                     The response object will acquire an object-wide lock before calling this
                     function, so it should be safe to use shared state within this function.
+            return_in_order: If True, results are returned in breadth-first order of their
+                    creation in the recursive tree of subtasks. Set this to False if you
+                    experience out of memory errors or long pauses and sudden bursts of
+                    results in your pipeline. These effects can occur due to the buffering
+                    of results required to return them in order.
             kwargs: Additional keyword arguments to pass to the aiohttp get/post method.
-
         """
-        super().__init__(apicadabri_args, method, max_active_calls, retrier, **kwargs)
+        super().__init__(
+            apicadabri_args=apicadabri_args,
+            method=method,
+            max_active_calls=max_active_calls,
+            retrier=retrier,
+            return_in_order=return_in_order,
+            size=size,
+            **kwargs,
+        )
         self.create_subtasks = subtask_creator
         self.create_subtasks_lock = asyncio.Lock()
-        self.sort_results = sort_results
 
     async def call_api(
         self,

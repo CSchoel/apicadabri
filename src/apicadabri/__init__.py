@@ -4,7 +4,6 @@ import asyncio
 import json
 import traceback
 from abc import ABC, abstractmethod
-from bisect import insort_right
 from collections.abc import AsyncGenerator, Callable, Coroutine, Generator, Iterable
 from http.cookies import SimpleCookie
 from itertools import product, repeat
@@ -1169,7 +1168,7 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
             ):
                 current_index, current_res = await res
                 orderer.insert_in_order(current_index, current_res)
-                for nxt in await orderer.retrieve_next():
+                for nxt in await orderer.retrieve_next_in_line():
                     yield nxt
 
     async def call_with_semaphore(

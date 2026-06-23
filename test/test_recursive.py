@@ -48,8 +48,8 @@ class DummyRR(ApicadabriRecursiveResponse[tuple[int, ...], str]):
 
 
 async def get_tuple_indices(indexer: SubtaskIndexer, n: int) -> list[tuple[int, ...]]:
-    tuple_indices = [await indexer.get_tuple_index(i) for i in range(n)]
-    return tuple_indices
+    """Helper function to get expected order of tuple indices from indexer."""
+    return [await indexer.get_tuple_index(i) for i in range(n)]
 
 
 class TestRecursiveResponse:
@@ -62,6 +62,7 @@ class TestRecursiveResponse:
         assert {"1", "1.0", "1.1", "1.2", "2", "2.0", "2.1", "2.2"} == set(res)
 
     def test_in_order(self) -> None:
+        """Hypothesis: The indexer returns tuple indices in breadth-first order."""
         result = DummyRR()
         _ = result.to_list()
         tuple_indices = asyncio.run(get_tuple_indices(result.indexer, 8))
