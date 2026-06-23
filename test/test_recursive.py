@@ -81,7 +81,7 @@ class TestRecursiveResponse:
 class TestRecursiveGet:
     """Tests for the top-level `recursive_get` function."""
 
-    def test_wiki(self) -> None:
+    def test_homepage(self) -> None:
         """Hypothesis: A task that crawls websites recursively returns all expected results."""
         self.download_counter = 0
 
