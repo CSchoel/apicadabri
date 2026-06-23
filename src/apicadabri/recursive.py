@@ -56,7 +56,6 @@ class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], Generic[A, R], A
         self,
         max_active_calls: int = 20,
         retrier: AsyncRetrier | None = None,
-        size: int | None = None,
         *,
         return_in_order: bool = True,
         **kwargs: Any,  # noqa: ANN401
@@ -67,7 +66,6 @@ class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], Generic[A, R], A
             max_active_calls: The maximum number of concurrent API calls to make.
             retrier: An instance of the AsyncRetrier class to use for retrying failed calls.
                     If None, a new instance will be created with default parameters.
-            size: Estimated number of individual calls made. Required for measuring progress.
             return_in_order: If True, results are returned in breadth-first order of their
                     creation in the recursive tree of subtasks. Set this to False if you
                     experience out of memory errors or long pauses and sudden bursts of
@@ -75,7 +73,7 @@ class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], Generic[A, R], A
                     of results required to return them in order.
             kwargs: Additional keyword arguments to pass to the parent class.
         """
-        super().__init__(max_active_calls=max_active_calls, retrier=retrier, size=size, **kwargs)
+        super().__init__(max_active_calls=max_active_calls, retrier=retrier, **kwargs)
         self.indexer = SubtaskIndexer()
         self.return_in_order = return_in_order
 
@@ -328,7 +326,6 @@ class ApicadabriRecursiveHTTPResponse(
         method: Literal["POST", "GET"],
         max_active_calls: int = 20,
         retrier: AsyncRetrier | None = None,
-        size: int | None = None,
         subtask_creator: SubtaskCreator = lambda client, index, instance_args, result: [],  # noqa: ARG005
         *,
         return_in_order: bool = False,
@@ -342,7 +339,6 @@ class ApicadabriRecursiveHTTPResponse(
             max_active_calls: The maximum number of concurrent API calls to make.
             retrier: An instance of the AsyncRetrier class to use for retrying failed calls.
                     If None, a new instance will be created with default parameters.
-            size: Estimated number of individual calls made. Required for measuring progress.
             subtask_creator: Function that decides whether to spawn subtasks from an API call.
                     The response object will acquire an object-wide lock before calling this
                     function, so it should be safe to use shared state within this function.
@@ -359,7 +355,6 @@ class ApicadabriRecursiveHTTPResponse(
             max_active_calls=max_active_calls,
             retrier=retrier,
             return_in_order=return_in_order,
-            size=size,
             **kwargs,
         )
         self.create_subtasks = subtask_creator
