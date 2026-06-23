@@ -386,6 +386,7 @@ class ApicadabriRecursiveHTTPResponse(
         return (idx, result)
 
 
+# FIXME: Retrier is not properly propagated (maybe an issue with multiple inheritance?)
 def recursive_get(  # noqa: PLR0913
     url: str | None = None,
     urls: Iterable[str] | None = None,
