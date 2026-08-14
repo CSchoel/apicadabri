@@ -1109,6 +1109,8 @@ class AsyncRetrier:
         raise RuntimeError(msg)
 
 
+# TODO Should this class get its own error handling, or is it too generic
+#      to make this meaningful here?
 class ApicadabriBulkResponse(ApicadabriResponse[R], ABC, Generic[A, R]):
     """Response class for bulk API calls.
 

@@ -36,6 +36,20 @@ class PoisonPill:
         return cls._instance
 
 
+class ApicadabriRecursiveExecutionError(Exception):
+    """Error during recursive execution.
+
+    This error is thrown if a recursive subtask fails with an exception, leading to a
+    premature insertion of a PoisonPill into the task queue.
+    """
+
+    def __init__(self) -> None:
+        """Create a new error."""
+        super().__init__(
+            "Error during recursive task execution. Refer to the causing error to fix this.",
+        )
+
+
 class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], ABC, Generic[A, R]):
     """Response type for recursive calls that can spawn new tasks within the call.
 
@@ -85,12 +99,15 @@ class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], ABC, Generic[A, 
 
         This method only returns after all the tasks in the task group have actually finished.
         """
-        async with aiohttp.ClientSession() as client, asyncio.TaskGroup() as tg:
-            self.task_group = tg
-            for idx, inst in enumerate(self.instances()):
-                await self.schedule_subtask(client, inst, (idx,))
-
-        await self.result_queue.put((-1, PoisonPill()))
+        try:
+            async with aiohttp.ClientSession() as client, asyncio.TaskGroup() as tg:
+                self.task_group = tg
+                for idx, inst in enumerate(self.instances()):
+                    await self.schedule_subtask(client, inst, (idx,))
+        except Exception as e:  # noqa: BLE001 - we raise it later
+            self.exception = e
+        finally:
+            self.result_queue.put_nowait((-1, PoisonPill()))
 
     async def schedule_subtask(
         self,
@@ -136,9 +153,9 @@ class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], ABC, Generic[A, 
         """
         # result needs to be stored to avoid garbage collection
         self.result_queue: asyncio.Queue[tuple[int, R | PoisonPill]] = asyncio.Queue()
+        self.exception = None
         self._main_task = asyncio.create_task(self.execute_task_group())
         orderer = BufferedOrdererTuple(self.indexer)
-
         result: R | PoisonPill = PoisonPill()
 
         async def pop_result() -> R | PoisonPill:
@@ -156,6 +173,9 @@ class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], ABC, Generic[A, 
             else:
                 yield result
             result = await pop_result()
+        await self._main_task
+        if self.exception is not None:
+            raise ApicadabriRecursiveExecutionError from self.exception
 
 
 class SubtaskCreator(Protocol):
@@ -387,7 +407,7 @@ class ApicadabriRecursiveHTTPResponse(
 
 
 # FIXME: Retrier is not properly propagated (maybe an issue with multiple inheritance?)
-def recursive_get(  # noqa: PLR0913
+def recursive_get(  # noqa: PLR0913, PLR0917
     url: str | None = None,
     urls: Iterable[str] | None = None,
     params: dict[str, str] | None = None,
@@ -474,7 +494,7 @@ def recursive_get(  # noqa: PLR0913
     )
 
 
-def recursive_post(  # noqa: PLR0913
+def recursive_post(  # noqa: PLR0913, PLR0917
     url: str | None = None,
     urls: Iterable[str] | None = None,
     params: dict[str, str] | None = None,
