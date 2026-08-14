@@ -1109,7 +1109,7 @@ class AsyncRetrier:
         raise RuntimeError(msg)
 
 
-class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
+class ApicadabriBulkResponse(ApicadabriResponse[R], ABC, Generic[A, R]):
     """Response class for bulk API calls.
 
     Apart from serving as the base class for all bulk HTTP calls, this class

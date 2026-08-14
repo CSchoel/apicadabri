@@ -36,7 +36,7 @@ class PoisonPill:
         return cls._instance
 
 
-class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], Generic[A, R], ABC):
+class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], ABC, Generic[A, R]):
     """Response type for recursive calls that can spawn new tasks within the call.
 
     To use this base class you have to implement the following methods:
