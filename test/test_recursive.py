@@ -114,6 +114,38 @@ class TestRecursiveGet:
         ).to_list()
         assert len(res) == 5
 
+    @pytest.mark.timeout(10)
+    def test_subtask_error(self) -> None:
+        """Hypothesis: An error thrown by a subtask is properly reported."""
+
+        def create_subtask(
+            client: aiohttp.ClientSession,
+            index: tuple[int, ...],
+            instance_args: ApicadabriCallInstance,
+            result: SyncedClientResponse,
+        ) -> Iterable[ApicadabriCallInstance]:
+            if len(index) == 1:
+                self.download_counter += 1
+                return ApicadabriCallArguments(
+                    url="does.not.exist",
+                    headers=self.headers,
+                )
+            return []
+
+        self.headers = {
+            "User-Agent": (
+                "ApicadabriBot/1.0 (https://arbitrary-but-fixed.net/;"
+                " apicadabri@arbitrary-but-fixed.org) apicadabri/1.0"
+            ),
+        }
+        res = recursive_get(
+            url="https://arbitrary-but-fixed.net/",
+            headers=self.headers,
+            subtask_creator=create_subtask,
+            retrier=AsyncRetrier(),
+        ).to_list()
+        assert len(res) == 2
+
 
 class TestSubtaskIndexer:
     """Tests for the `SubtaskIndexer` class."""
