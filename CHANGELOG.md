@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `recursive_get` and `recursive_put` to call APIs recursively.
+- `recursive_get` and `recursive_post` to call APIs recursively.
 
 ## [0.5.1] - 2025-05-19
 
