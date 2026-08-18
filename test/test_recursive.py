@@ -1,7 +1,9 @@
 """Tests related to recursive tasks."""
 
 import asyncio
+import math
 import re
+import time
 from collections.abc import Iterable
 from urllib.parse import urljoin
 
@@ -186,3 +188,48 @@ class TestSubtaskIndexer:
         expected_order = [(0,), (1,), (0, 0), (0, 1), (1, 0), (1, 1)]
         actual_order = [await indexer.next_index(i) for i in range(len(expected_order))]
         assert expected_order == actual_order
+
+    @pytest.mark.asyncio
+    @pytest.mark.timeout(2)
+    async def test_indexer_without_order_is_linear(self) -> None:
+        """Hypothesis: By turning ordering off, we can get linear performance on large tasks."""
+        sizes = [9_000, 18_000, 36_000, 72_000]
+        times = []
+        for size in sizes:
+            indexer = SubtaskIndexer(remember_order=False)
+            counter = time.perf_counter()
+            results = await asyncio.gather(
+                *(indexer.add_tuple_index((i,)) for i in range(size)),
+            )
+            elapsed = time.perf_counter() - counter
+            times.append(elapsed)
+            assert results[-1] == size - 1
+            last_index = await indexer.get_tuple_index(results[-1])
+            assert last_index == (size - 1,)
+        proportional_increase = [times[i] / times[i - 1] for i in range(1, len(times))]
+        assert proportional_increase == pytest.approx([2] * (len(sizes) - 1), abs=2)
+
+    @pytest.mark.asyncio
+    @pytest.mark.timeout(1)
+    async def test_indexer_with_order_is_quadratic(self) -> None:
+        """Hypothesis: By turning ordering off, we can get linear performance on large tasks."""
+        sizes = [2_250, 4_500, 9_000, 18_000]
+        times = []
+        for size in sizes:
+            indexer = SubtaskIndexer(remember_order=True)
+            counter = time.perf_counter()
+            results = await asyncio.gather(
+                *(indexer.add_tuple_index((i,)) for i in range(size)),
+            )
+            elapsed = time.perf_counter() - counter
+            times.append(elapsed)
+            assert results[-1] == size - 1
+            last_index = await indexer.get_tuple_index(results[-1])
+            assert last_index == (size - 1,)
+        proportional_increase = [
+            math.sqrt(times[i]) / math.sqrt(times[i - 1]) for i in range(1, len(times))
+        ]
+        assert proportional_increase == pytest.approx(
+            [math.sqrt(2)] * (len(sizes) - 1),
+            abs=0.4,
+        )

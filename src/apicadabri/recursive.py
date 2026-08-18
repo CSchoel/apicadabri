@@ -88,7 +88,7 @@ class ApicadabriRecursiveResponse(ApicadabriBulkResponse[A, R], ABC, Generic[A, 
             kwargs: Additional keyword arguments to pass to the parent class.
         """
         super().__init__(max_active_calls=max_active_calls, retrier=retrier, **kwargs)
-        self.indexer = SubtaskIndexer()
+        self.indexer = SubtaskIndexer(remember_order=return_in_order)
         self.return_in_order = return_in_order
 
     async def execute_task_group(self) -> None:
@@ -215,7 +215,12 @@ class SubtaskIndexer:
     the tuple-based indices they represent.
     """
 
-    def __init__(self, *args: list[Any], **kwargs: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        *args: list[Any],
+        remember_order: bool = True,
+        **kwargs: dict[str, Any],
+    ) -> None:
         """Creates a new subtask.
 
         Designed to play nice with any kind of subclass constructor under
@@ -223,12 +228,15 @@ class SubtaskIndexer:
 
         Args:
             args: Positional arguments (forwarded to other constructors).
+            remember_order: If True, will keep a dictionary of order which
+                costs O(n²) over the whole task.
             kwargs: Keyword arguments (forwarded rto other constructors).
         """
         super().__init__(*args, **kwargs)
         self.single_to_tuple: dict[int, tuple[int, ...]] = {}
         self.single_to_tuple_lock = asyncio.Lock()
         self.ordered_tuples = []
+        self.remember_order = remember_order
         self.index_counter = 0
 
     async def get_tuple_index(self, index: int) -> tuple[int, ...]:
@@ -255,6 +263,9 @@ class SubtaskIndexer:
         This method generates the next available integer index and maps it to
         the provided tuple.
 
+        For `self.remember_order == False` this is in O(1), otherwise it's in
+        O(n).
+
         Args:
             index: The tuple-based index to register.
 
@@ -265,11 +276,14 @@ class SubtaskIndexer:
             int_index = self.index_counter
             self.single_to_tuple[int_index] = index
             self.index_counter += 1
-            insort_right(
-                self.ordered_tuples,
-                index,
-                key=lambda x: (-len(x), tuple(-i for i in x)),
-            )
+            if self.remember_order:
+                # NOTE: If this ever becomes a bottleneck, we can replace it with
+                #       a SortedList if we accept sortedcontainers as dependency.
+                insort_right(
+                    self.ordered_tuples,
+                    index,
+                    key=lambda x: (-len(x), tuple(-i for i in x)),
+                )
         return int_index
 
     async def next_index(self, n: int) -> tuple[int, ...] | None:
@@ -281,6 +295,12 @@ class SubtaskIndexer:
         Returns:
             The next index to expect.
         """
+        if not self.remember_order:
+            msg = (
+                "SubtaskIndexer was created with self.remember_order = False, "
+                "can't determine next index."
+            )
+            raise NotImplementedError(msg)
         async with self.single_to_tuple_lock:
             return self.ordered_tuples[-(n + 1)] if len(self.ordered_tuples) >= n + 1 else None
 
