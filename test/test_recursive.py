@@ -112,6 +112,7 @@ class TestRecursiveGet:
             headers=self.headers,
             subtask_creator=create_subtask,
             retrier=AsyncRetrier(),
+            timeout=5,
         ).to_list()
         assert len(res) == 5
 
