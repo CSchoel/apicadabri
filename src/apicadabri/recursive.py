@@ -348,7 +348,7 @@ class ApicadabriRecursiveHTTPResponse(
         retrier: AsyncRetrier | None = None,
         subtask_creator: SubtaskCreator = lambda client, index, instance_args, result: [],  # noqa: ARG005
         *,
-        return_in_order: bool = False,
+        return_in_order: bool = True,
         **kwargs: Any,  # noqa: ANN401
     ) -> None:
         """Initialize the response object.
@@ -507,6 +507,8 @@ def recursive_post(  # noqa: PLR0913, PLR0917
     max_active_calls: int = 20,
     retrier: AsyncRetrier | None = None,
     subtask_creator: SubtaskCreator = lambda client, index, instance_args, result: [],  # noqa: ARG005
+    *,
+    return_in_order: bool = True,
     **kwargs: Any,  # noqa: ANN401
 ) -> ApicadabriRecursiveHTTPResponse:
     """Make a recursive POST request to the given API endpoint.
@@ -541,6 +543,11 @@ def recursive_post(  # noqa: PLR0913, PLR0917
         retrier: An instance of the AsyncRetrier class to use for retrying failed calls.
                  If None, a new instance will be created with default parameters.
         subtask_creator: Function that decides whether to spawn subtasks from an API call.
+        return_in_order: If True, results are returned in breadth-first order of their
+                    creation in the recursive tree of subtasks. Set this to False if you
+                    experience out of memory errors or long pauses and sudden bursts of
+                    results in your pipeline. These effects can occur due to the buffering
+                    of results required to return them in order.
         kwargs: Additional keyword arguments to pass to the aiohttp post method.
 
     Returns:
@@ -570,6 +577,7 @@ def recursive_post(  # noqa: PLR0913, PLR0917
         max_active_calls=max_active_calls,
         retrier=retrier,
         subtask_creator=subtask_creator,
+        return_in_order=return_in_order,
         **kwargs,
     )
 
