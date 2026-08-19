@@ -282,7 +282,7 @@ class SubtaskIndexer:
                 insort_right(
                     self.ordered_tuples,
                     index,
-                    key=lambda x: (-len(x), tuple(-i for i in x)),
+                    key=BufferedOrdererTuple.static_sorting_key,
                 )
         return int_index
 
@@ -323,7 +323,8 @@ class BufferedOrdererTuple(BufferedOrdererBase[tuple[int, ...], R]):
         super().__init__(*args, **kwargs)
         self.indexer = indexer
 
-    def sorting_key(self, index: tuple[int, ...]) -> Ordered:
+    @classmethod
+    def static_sorting_key(cls, index: tuple[int, ...]) -> Ordered:
         """Sorts indices by length (shortest last) and reverse tuple order.
 
         The goal is to retrieve indices in breadth-first order.
@@ -335,6 +336,19 @@ class BufferedOrdererTuple(BufferedOrdererBase[tuple[int, ...], R]):
             A key for sorting a buffer of indices.
         """
         return (-len(index), tuple(-i for i in index))
+
+    def sorting_key(self, index: tuple[int, ...]) -> Ordered:
+        """Sorts indices by length (shortest last) and reverse tuple order.
+
+        The goal is to retrieve indices in breadth-first order.
+
+        Args:
+            index: The index.
+
+        Returns:
+            A key for sorting a buffer of indices.
+        """
+        return BufferedOrdererTuple.static_sorting_key(index)
 
     async def next_expected_index(self, n: int) -> tuple[int, ...] | None:
         """Retrieves next expected index from Indexer.
