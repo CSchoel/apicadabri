@@ -10,11 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `recursive_get` and `recursive_post` to call APIs recursively.
+- Tests for `ApicadabriCallArguments` that just specifies `url` and no other field as regression test for the infinite generator (see fixes).
 
 ### Changed
 
 - Bumps version of GH actions used in the CI.
+- Validates that `ApicadabriCallArguments` sets either `url` or `urls`.
 
+### Fixed
+
+- Specifying an `ApicadabriCallArguments` instance that only provides single values for all fields with `zip` mode yielded an infinite iterator (because it zipped four `repeat()` generators).
+- Moves away from yanked version `3.11.14` of `aiohttp`.
 
 ## [0.5.1] - 2025-05-19
 
