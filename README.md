@@ -218,7 +218,7 @@ Example:
 import aiohttp
 from apicadabri import ApicadabriCallArguments, AsyncRetrier
 from apicadabri.recursive import recursive_get
-from typing import cast
+from typing import cast, Any
 data = (
     recursive_get(
         urls=[f"https://pokeapi.co/api/v2/pokemon/{id}" for id in range(1, 3)],
