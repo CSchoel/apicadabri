@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `recursive_get` and `recursive_post` to call APIs recursively.
 
+### Changed
+
+- Bumps version of GH actions used in the CI.
+
+
 ## [0.5.1] - 2025-05-19
 
 ### Fixed
