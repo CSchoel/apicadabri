@@ -4,7 +4,6 @@ import asyncio
 import json
 import traceback
 from abc import ABC, abstractmethod
-from bisect import insort_right
 from collections.abc import AsyncGenerator, Callable, Coroutine, Generator, Iterable
 from http.cookies import SimpleCookie
 from itertools import product, repeat
@@ -27,6 +26,8 @@ from pydantic import (
     model_validator,
 )
 from tqdm.asyncio import tqdm
+
+from apicadabri.helpers import BufferedOrderer
 
 # source: https://stackoverflow.com/a/76646986
 # NOTE: we could use "JSON" instead of Any here to define a recursive type
@@ -165,6 +166,14 @@ class ApicadabriCallArguments(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def validate_url_provided(self) -> Self:
+        """Validate that either `url` or `urls` is provided."""
+        if self.url is None and self.urls is None:
+            msg = "You have to specify either `url` or `urls`."
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
     def validate_size(self) -> Self:
         """If actual size is computable but size is given, validate that both match."""
         if isinstance(self.size, int):
@@ -196,6 +205,22 @@ class ApicadabriCallArguments(BaseModel):
             The argument sets to call the API with.
 
         """
+        if all(x is None for x in (self.urls, self.param_sets, self.json_sets, self.header_sets)):
+            # No iterables, just a single call.
+            # This needs to be handled separately because if `self.mode == zip`, we would
+            # zip four instances of a repeat(), creating an infinite iterator.
+            if self.url is None:
+                msg = "One of `url` or `urls` must be non-null."
+                raise ValueError(msg)
+            return iter(
+                ApicadabriCallInstance(
+                    url=self.url,
+                    params=self.params if self.params is not None else {},
+                    json=self.json_data,
+                    headers=self.headers if self.headers is not None else {},
+                )
+                for i in range(1)
+            )
         iterables = (
             self.url_iterable,
             self.params_iterable,
@@ -278,13 +303,15 @@ class ApicadabriCallArguments(BaseModel):
         given via `self.size` into account.
         """
         op = min if self.mode == "zip" else mul
-        size = 2**63 if self.mode == "zip" else 1
-        for name, iterable in [
+        iterable_args = [
             ("urls", self.urls),
             ("param_sets", self.param_sets),
             ("json_sets", self.json_sets),
             ("header_sets", self.header_sets),
-        ]:
+        ]
+        all_undefined = all(x is None for _, x in iterable_args)
+        size = 2**63 if self.mode == "zip" and not all_undefined else 1
+        for name, iterable in iterable_args:
             if iterable is None:
                 continue
             try:
@@ -302,7 +329,7 @@ class ApicadabriCallArguments(BaseModel):
         estimate is possible at all.
 
         Returns:
-            Number of calls made by these args or None if this can't be estimated.
+            Number of calls made by these instance_args or None if this can't be estimated.
 
         """
         try:
@@ -1082,7 +1109,9 @@ class AsyncRetrier:
         raise RuntimeError(msg)
 
 
-class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
+# TODO Should this class get its own error handling, or is it too generic
+#      to make this meaningful here?
+class ApicadabriBulkResponse(ApicadabriResponse[R], ABC, Generic[A, R]):
     """Response class for bulk API calls.
 
     Apart from serving as the base class for all bulk HTTP calls, this class
@@ -1113,7 +1142,7 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
             retrier: An instance of the AsyncRetrier class to use for retrying failed calls.
                      If None, a new instance will be created with default parameters.
             size: Estimated number of individual calls made. Required for measuring progress.
-            args: Additional positional arguments to pass to the parent class.
+            instance_args: Additional positional arguments to pass to the parent class.
             kwargs: Additional keyword arguments to pass to the parent class.
 
         """
@@ -1130,8 +1159,7 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
         `instances`. However, it also allows to inspect and process results
         as they arrive.
         """
-        next_index = 0
-        buffer: list[tuple[int, R]] = []
+        orderer: BufferedOrderer[R] = BufferedOrderer()
         # TODO: would it make sense to allow generic types of sessions here instead of aiohttp?
         async with aiohttp.ClientSession() as client:
             for res in asyncio.as_completed(
@@ -1141,11 +1169,9 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
                 ],
             ):
                 current_index, current_res = await res
-                insort_right(buffer, (current_index, current_res), key=lambda x: -x[0])
-                while current_index == next_index:
-                    yield buffer.pop()[1]
-                    current_index = buffer[-1][0] if len(buffer) > 0 else -1
-                    next_index += 1
+                orderer.insert_in_order(current_index, current_res)
+                for nxt in await orderer.retrieve_next_in_line():
+                    yield nxt
 
     async def call_with_semaphore(
         self,
@@ -1173,7 +1199,7 @@ class ApicadabriBulkResponse(ApicadabriResponse[R], Generic[A, R], ABC):
         The arguments are assumed to be generated by the `instances` method.
 
         Args:
-            client: The aiohttp client session to use for the request.
+            client: The aiohttp client client to use for the request.
             index: The index of the instance in the list of instances.
             instance_args: The arguments to pass to the API call.
 
@@ -1225,20 +1251,20 @@ class ApicadabriBulkHTTPResponse(
 
     async def call_api(
         self,
-        session: aiohttp.ClientSession,
+        client: aiohttp.ClientSession,
         index: int,
-        args: ApicadabriCallInstance,
+        instance_args: ApicadabriCallInstance,
     ) -> tuple[int, SyncedClientResponse]:
         """Call the API with the given arguments and return the response.
 
         Args:
-            session: The aiohttp client session to use for the request.
+            client: The aiohttp client client to use for the request.
             index: The index of the instance in the list of instances.
-            args: The arguments to pass to the API call.
+            instance_args: The arguments to pass to the API call.
 
         """
-        aiohttp_method = session.post if self.method == "POST" else session.get
-        method_args = {**args.model_dump(by_alias=True), **self.aiohttp_kwargs}
+        aiohttp_method = client.post if self.method == "POST" else client.get
+        method_args = {**instance_args.model_dump(by_alias=True), **self.aiohttp_kwargs}
         async with (
             aiohttp_method(**method_args) as resp,
             resp,
