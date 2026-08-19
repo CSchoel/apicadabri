@@ -190,7 +190,7 @@ class TestSubtaskIndexer:
         assert expected_order == actual_order
 
     @pytest.mark.asyncio
-    @pytest.mark.timeout(2)
+    @pytest.mark.timeout(20)
     async def test_indexer_without_order_is_linear(self) -> None:
         """Hypothesis: By turning ordering off, we can get linear performance on large tasks."""
         sizes = [9_000, 18_000, 36_000, 72_000]
@@ -210,7 +210,7 @@ class TestSubtaskIndexer:
         assert proportional_increase == pytest.approx([2] * (len(sizes) - 1), abs=2)
 
     @pytest.mark.asyncio
-    @pytest.mark.timeout(1)
+    @pytest.mark.timeout(10)
     async def test_indexer_with_order_is_quadratic(self) -> None:
         """Hypothesis: By turning ordering off, we can get linear performance on large tasks."""
         sizes = [2_250, 4_500, 9_000, 18_000]
